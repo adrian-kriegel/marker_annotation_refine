@@ -1,0 +1,7 @@
+#!/bin/sh
+
+./dev/test.sh && \
+
+./dev/freeze.sh && \
+
+git add requirements.txt
