@@ -1,2 +1,4 @@
 python_env/
 *.log
+.pytest_cache
+.env
