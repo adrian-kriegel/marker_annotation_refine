@@ -1,5 +1,4 @@
 
-from cmath import cos
 import math
 import os
 
@@ -8,9 +7,9 @@ from cityscapes_helpers import CSImage
 import matplotlib.pyplot as plt
 import matplotlib
 
-from marker_annotation import MarkerLine, Point, draw_marker
+from marker_annotation import MarkerLine, draw_marker
+from geometry_util import mask_to_polygons
 from path_interp import PathInterp
-from scipy.signal import butter, lfilter, freqz
 
 matplotlib.use('TkAgg')
 
@@ -34,7 +33,7 @@ def low_pass(data, f):
 
 
 def simulate_marker(
-  edges : list[Point],
+  ex, ey, # edges
   interp_num : int,
   brush_size : int,
   jitter_freq : float,
@@ -48,7 +47,7 @@ def simulate_marker(
   '''
 
   # interpolate the polygon
-  points = low_pass(PathInterp(edges)(np.linspace(0, 1, interp_num)), f=1 - 1/interp_num * low_pass_factor)
+  points = low_pass(PathInterp(ex, ey)(np.linspace(0, 1, interp_num)), f=1 - 1/interp_num * low_pass_factor)
 
   center = np.mean(points, axis=0)
 
@@ -67,11 +66,8 @@ def simulate_marker(
   }
 
 def draw_marker_from_polygon(
-  poly,
+  x,y,
 ):
-
-  # calclualte bounding box of polygon
-  x,y = np.array(poly['polygon']).transpose()
   x0 = np.min(x)
   x1 = np.max(x)
   y0 = np.min(y)
@@ -87,7 +83,7 @@ def draw_marker_from_polygon(
     brush_size = math.floor(scale / np.random.uniform(2, 8))
 
     line = simulate_marker(
-      poly['polygon'],
+      x,y,
       50,
       brush_size,
       np.random.uniform(0.001, 0.005)*scale,
@@ -108,30 +104,33 @@ if __name__ == '__main__':
 
   img_name = 'train/erfurt/erfurt_000041_000019'
 
-  p = CSImage(os.environ['CITYSCAPES_LOCATION'], img_name)
+  csimg = CSImage(os.environ['CITYSCAPES_LOCATION'], img_name)
 
-  w,h = p.polygons()['imgWidth'], p.polygons()['imgHeight']
+  for instance_id in csimg.instance_ids():
 
-  background = p.img()
+    p0,p1,label_mask = csimg.instance_mask(instance_id)
 
+    polygons = mask_to_polygons(label_mask)
+    
+    print(instance_id)
 
-  for poly in p.polygons()['objects']:
+    for polygon in polygons:
 
-    plt.title(poly['label'])
-    plt.imshow(background)
+      plt.subplot(1,2,1)
 
-    start, marker = draw_marker_from_polygon(poly)
+      x,y = np.transpose(polygon)
+      x = np.array(x).flatten()
+      y = np.array(y).flatten()
 
-    # calculate the extent of the marker on the real image
-    l,b = start
-    r,t = np.array(start) + (marker.shape[1], marker.shape[0])
+      plt.plot(x,y)
 
-    plt.imshow(marker, extent=(l, r, t, b), alpha=0.5)
+      plt.imshow(csimg.img())
 
+      plt.subplot(1,2,2)
 
-    #plt.xlim((0, background.width))
-    #plt.ylim((background.height, 0))
+      (mx, my), marker = draw_marker_from_polygon(x,y)
 
-    plt.show()
+      plt.imshow(marker)
 
+      plt.show()
 

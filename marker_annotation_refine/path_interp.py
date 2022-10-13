@@ -6,13 +6,11 @@ Point = tuple[int, int]
 
 class PathInterp:
 
-  def __init__(self, edges : list[Point] | np.ndarray):
+  def __init__(self, ex, ey):
 
-    self.edges = np.array(
-      [np.array(p) for p in edges]
-    )
-
-    self.lengths = np.zeros(len(edges) - 1)
+    self.edges = np.transpose((ex, ey))
+    
+    self.lengths = np.zeros(len(self.edges) - 1)
 
     self.lengths[0] = 0
 
