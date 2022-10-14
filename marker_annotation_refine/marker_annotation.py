@@ -70,7 +70,8 @@ def draw_single_line(
   x0 : int, 
   y0 : int,
   brush_size : int,
-  points : list[Point]
+  points : list[Point],
+  intensity = 1
 ):
 
   r = brush_size / 2
@@ -82,7 +83,7 @@ def draw_single_line(
       points[0][0] + r - x0,
       points[0][1] + r - y0
     ),
-    fill=1
+    fill=intensity
   )
 
   draw.ellipse(
@@ -92,19 +93,26 @@ def draw_single_line(
       points[-1][0] + r - x0,
       points[-1][1] + r - y0
     ),
-    fill=1
+    fill=intensity
   )
 
   draw.line(
     [*[(p[0] - x0, p[1] - y0) for p in points], (points[0][0] - x0, points[0][1] - y0)], 
     width=brush_size, 
-    fill=1,
+    fill=intensity,
     joint='curve'
   )
 
+def next_pow_2(x : float):
+
+  return int(
+    pow(2, math.ceil(math.log(x)/math.log(2)))
+  )
 
 def draw_marker(
-  lines : list[MarkerLine]
+  lines : list[MarkerLine],
+  padding : int,
+  highlight_center=True
 ):
 
   '''
@@ -114,6 +122,11 @@ def draw_marker(
 
   x,y,w,h = get_bounding_box(lines)
   
+  x -= int(padding // 2)
+  y -= int(padding // 2)
+  w += int(padding)
+  h += int(padding)
+
   res = np.zeros((h, w))
 
   for line in lines:
@@ -130,6 +143,17 @@ def draw_marker(
       line['points']
     )
 
+    if highlight_center:
+
+      draw_single_line(
+        draw, 
+        x,
+        y,
+        1, 
+        line['points'],
+        2
+      )
+
     # erase or draw the line
     if line['t']:
 
@@ -139,4 +163,4 @@ def draw_marker(
 
       res -= np.array(img) 
 
-  return (x,y), res
+  return (x,y), res/np.max(res)

@@ -2,7 +2,6 @@
 
 import json
 import os
-import re
 import typing
 
 from PIL import Image
@@ -32,8 +31,6 @@ class CSImage:
   __instance_id_map : Image.Image | None = None
 
   __label_id_map : Image.Image | None = None
-
-  __class_id_map : np.ndarray
 
   __img : Image.Image | None = None
 
@@ -81,12 +78,6 @@ class CSImage:
       )
 
     return self.__label_id_map
-
-  def label_id_from_polygon(self, poly : LabelledPolygon):
-
-    x,y = poly['polygon'][0]
-
-    return self.label_id_map().getpixel((x,y))
 
   def instance_ids(self):
 
@@ -144,3 +135,15 @@ class CSImage:
       )
 
     return self.__img
+
+  def instance_id_to_label_id(self, instance_id : int):
+
+    label_ids = np.unique(np.array(self.label_id_map())[
+      (np.array(self.instance_id_map()) == instance_id).nonzero()
+    ])
+
+    if not len(label_ids) == 1:
+
+      raise Exception('Too many label ids for instance.')
+    
+    return label_ids[0]

@@ -21,7 +21,7 @@ def mask_to_polygons(mask : np.ndarray):
 
   for shape,_ in shapes:
 
-    coords = np.array(shape['coordinates'])
+    coords = shape['coordinates']
 
     # shape will sometimes have multiple polygons and sometimes not
     if type(coords[0]) == tuple:
@@ -29,8 +29,8 @@ def mask_to_polygons(mask : np.ndarray):
      coords = np.array([coords])
 
     polygons = [
-      *polygons, 
-      *coords
+      *polygons,
+      *[np.array(c) for c in coords]
     ]
     
 
