@@ -90,12 +90,16 @@ class CSImage:
 
   def instance_ids(self):
 
-    return np.unique(np.array(self.instance_id_map()))
+    ids = np.unique(np.array(self.instance_id_map()))
+
+    return ids[ids.nonzero()]
 
   
   def label_ids(self):
 
-    return np.unique(np.array(self.label_id_map()))
+    ids = np.unique(np.array(self.label_id_map()))
+
+    return ids[ids.nonzero()]
 
   def label_mask(self, id : int):
 

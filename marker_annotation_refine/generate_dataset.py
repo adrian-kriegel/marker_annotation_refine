@@ -1,6 +1,7 @@
 
 import math
 import os
+from PIL import Image
 
 import numpy as np
 from cityscapes_helpers import CSImage
@@ -8,10 +9,13 @@ import matplotlib.pyplot as plt
 import matplotlib
 
 from marker_annotation import MarkerLine, draw_marker
-from geometry_util import mask_to_polygons
+from geometry_util import mask_to_polygons, polygon_to_mask
 from path_interp import PathInterp
 
 matplotlib.use('TkAgg')
+
+MIN_POLYGON_AREA_PX = 10*10
+MAX_POLYGON_AREA_RATIO = 0.9
 
 def normalize(v):
 
@@ -80,11 +84,11 @@ def draw_marker_from_polygon(
 
   for i in range(6):
 
-    brush_size = math.floor(scale / np.random.uniform(2, 8))
+    brush_size = math.floor(scale / np.random.uniform(1, 6))
 
     line = simulate_marker(
       x,y,
-      50,
+      100,
       brush_size,
       np.random.uniform(0.001, 0.005)*scale,
       np.random.uniform(0.05, 0.2)*scale,
@@ -106,6 +110,8 @@ if __name__ == '__main__':
 
   csimg = CSImage(os.environ['CITYSCAPES_LOCATION'], img_name)
 
+  img_area = csimg.instance_id_map().width * csimg.instance_id_map().height
+
   for instance_id in csimg.instance_ids():
 
     p0,p1,label_mask = csimg.instance_mask(instance_id)
@@ -116,21 +122,40 @@ if __name__ == '__main__':
 
     for polygon in polygons:
 
-      plt.subplot(1,2,1)
-
       x,y = np.transpose(polygon)
       x = np.array(x).flatten()
       y = np.array(y).flatten()
 
-      plt.plot(x,y)
+      # width, height of the polygons bounding box
+      pw, ph = np.max(x) - np.min(x), np.max(y) - np.min(y)
 
-      plt.imshow(csimg.img())
+      area = abs(pw) * abs(ph)
+      
+      if (
+        area < MIN_POLYGON_AREA_PX or 
+        area / img_area > MAX_POLYGON_AREA_RATIO
+      ):
+        continue
 
-      plt.subplot(1,2,2)
+      plt.subplot(1,3,1)
 
       (mx, my), marker = draw_marker_from_polygon(x,y)
 
+      box = (mx, my, mx + marker.shape[1], my + marker.shape[0])
+
+      plt.imshow(csimg.img().crop(box))
+
+      plt.subplot(1,3,2)
+
       plt.imshow(marker)
+
+      plt.subplot(1,3,3)
+
+      instance_map = np.array(csimg.instance_id_map()) == instance_id
+
+      mask = polygon_to_mask(polygon, instance_map.shape)
+      
+      plt.imshow(Image.fromarray(mask).crop(box))
 
       plt.show()
 
