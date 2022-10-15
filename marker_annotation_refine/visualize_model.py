@@ -33,10 +33,17 @@ decoder.to('cpu')
 
 matplotlib.use('TkAgg')
 
-thrs = 0.6
+thrs = 0.4
 
-conv_rate = 0.3
-num_iterations = 3
+conv_rate = 0.01
+num_iterations = 10
+
+masked_blur_sigma = 2
+masked_blur_rate = 0.3
+
+def masked_blur(img, mask, sigma):
+
+  return (1-mask) * img + mask * gaussian(img, sigma)
 
 for v in dataset:
 
@@ -52,7 +59,7 @@ for v in dataset:
 
   for i in range(num_iterations):
 
-    output = decoder.forward(encoder.forward(inp))
+    output = decoder.forward(encoder.forward(_inp))
   
     out_img = output[0].cpu().detach().numpy().reshape(output.shape[2:4])
     
@@ -61,10 +68,18 @@ for v in dataset:
       gt.shape
     )
 
-    _inp[0, 3, :, :] = (1-conv_rate)*_inp[0, 3, :, :] + torch.from_numpy(out_img * conv_rate)
+    out_fb = torch.from_numpy(out_img)
 
-    out_img = gaussian(out_img, np.min(out_img.shape)*0.03)
+    blur_mask = (1 - out_fb)*masked_blur_rate
 
+    _inp[0, 0, :, :] = masked_blur(_inp[0, 0, :, :], blur_mask, masked_blur_sigma)
+    _inp[0, 1, :, :] = masked_blur(_inp[0, 1, :, :], blur_mask, masked_blur_sigma)
+    _inp[0, 2, :, :] = masked_blur(_inp[0, 2, :, :], blur_mask, masked_blur_sigma)
+
+    _inp[0, 3, :, :] = (1-conv_rate)*_inp[0, 3, :, :] + out_fb*conv_rate
+
+  
+  out_img = gaussian(out_img, np.min(out_img.shape)*0.02)
 
   inp = inp.cpu().detach().numpy()
 
@@ -82,12 +97,21 @@ for v in dataset:
     plt.plot(x, y, color='red')
 
     x,y = np.transpose(polygon_gt)
-    plt.plot(x, y, color='green')
+    plt.plot(x, y, color='green', alpha=0.7)
 
   plt.subplot(1,3,2)
   plt.imshow(marker)
 
   plt.subplot(1,3,3)
+
+  blurred = np.zeros(img.shape)
+  
+  blurred[:,:,0] = masked_blur(img[:,:,0], 1 - out_img, 10)
+  blurred[:,:,1] = masked_blur(img[:,:,1], 1 - out_img, 10)
+  blurred[:,:,2] = masked_blur(img[:,:,2], 1 - out_img, 10)
+
+  #plt.imshow(blurred)
+
   plt.imshow(out_img)
 
   plt.show()
