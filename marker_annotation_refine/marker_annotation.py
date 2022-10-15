@@ -1,25 +1,26 @@
 
 import math
 import sys
-from typing import TypedDict
+from typing_extensions import TypedDict
+import typing
 from PIL import Image, ImageDraw
 import numpy as np
 
-Point = tuple[int, int]
+Point = typing.Tuple[int, int]
 
 # TODO: generate python types from annotation-api
 MarkerLine = TypedDict(
   'MarkerLine',
   {
     'brushSize': int,
-    'points': list[Point],
+    'points': typing.List[Point],
     't': bool
   }
 )
 
 def flip_y(
   h,
-  points : list[Point]
+  points : typing.List[Point]
 ):
 
   return [
@@ -27,8 +28,8 @@ def flip_y(
   ]
 
 def get_bounding_box(
-  lines : list[MarkerLine]
-) -> tuple[int, int, int, int]:
+  lines : typing.List[MarkerLine]
+) -> typing.Tuple[int, int, int, int]:
 
   x0 : int = sys.maxsize
   y0 : int = sys.maxsize
@@ -70,7 +71,7 @@ def draw_single_line(
   x0 : int, 
   y0 : int,
   brush_size : int,
-  points : list[Point],
+  points : typing.List[Point],
   intensity = 1
 ):
 
@@ -110,7 +111,7 @@ def next_pow_2(x : float):
   )
 
 def draw_marker(
-  lines : list[MarkerLine],
+  lines : typing.List[MarkerLine],
   padding : int,
   highlight_center=True
 ):

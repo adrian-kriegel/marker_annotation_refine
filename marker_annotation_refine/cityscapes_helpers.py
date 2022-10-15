@@ -2,37 +2,41 @@
 
 import json
 import os
-import typing
+
+# required for running on colab
+from typing_extensions import TypedDict
+
+from typing import Union
 
 from PIL import Image
 import numpy as np
 
-LabelledPolygon = typing.TypedDict(
+LabelledPolygon = TypedDict(
   'LabelledPolygon',
   {
     'label': str,
-    'polygon': list[tuple[int, int]]
+    'polygon': list
   }
 )
 
-Polygons = typing.TypedDict(
+Polygons = TypedDict(
   'Polygons',
   {
     'imgHeight': int,
     'imgWidth': int,
-    'objects': list[LabelledPolygon]
+    'objects': list
   }
 )
 
 class CSImage:
 
-  __polygons : Polygons | None = None
+  __polygons : Union[Polygons, None] = None
 
-  __instance_id_map : Image.Image | None = None
+  __instance_id_map : Union[Image.Image, None] = None
 
-  __label_id_map : Image.Image | None = None
+  __label_id_map : Union[Image.Image, None] = None
 
-  __img : Image.Image | None = None
+  __img : Union[Image.Image, None] = None
 
   def __init__(self, dataset_path : str, img_name : str):
 

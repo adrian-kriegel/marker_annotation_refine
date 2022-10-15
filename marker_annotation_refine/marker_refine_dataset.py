@@ -1,9 +1,7 @@
 
-import json
 import math
 import os
 from PIL import Image
-import PIL
 
 import numpy as np
 from cityscapes_helpers import CSImage
@@ -18,8 +16,6 @@ from cityscapesscripts.helpers.labels import id2label, Label
 
 import torch.utils.data
 from glob import glob
-
-matplotlib.use('TkAgg')
 
 IGNORE_LABELS = ['unlabeled', 'rectification border', 'out of roi', 'static', 'dynamic']
 
@@ -116,10 +112,15 @@ def draw_marker_from_polygon(
 
 def get_image_names(dataset_path : str, mode : str):
 
+  base_path = os.path.join(dataset_path, 'leftImg8bit')
+
+  if base_path[-1] != '/':
+    base_path = base_path + '/'
+
   return [
-    os.path.join(mode, name.replace('_leftImg8bit.png', '')) for name in glob(
-      '*/*.png', 
-      root_dir=os.path.join(dataset_path, 'leftImg8bit', mode)
+    name.replace('_leftImg8bit.png', '').replace(base_path, '') for name in glob(
+      # cannot use root_dir on python 3.7
+      os.path.join(base_path, mode, '*/*.png'),
     )
   ]
 
@@ -151,7 +152,7 @@ class MarkerRefineDataset(torch.utils.data.Dataset):
     Returns image, marker, mask
     '''
 
-    idx = int(np.random.rand() * len(self.image_names))
+    idx = int(np.random.rand() * len(self))
 
     csimg = CSImage(self.dataset_path, self.image_names[idx % len(self.image_names)])
 
@@ -233,15 +234,17 @@ if __name__ == '__main__':
 
   from dotenv import load_dotenv
 
+  matplotlib.use('TkAgg')
+
   load_dotenv()
 
   dataset = MarkerRefineDataset(os.environ['CITYSCAPES_LOCATION'])
-
+  print(dataset.image_names[0])
   for v in dataset:
 
     if not v == None:
 
-      img, marker, gt = None# TODO
+      img, marker, gt = None# type: ignore # TODO
 
       plt.subplot(1,3,1)
       plt.imshow(img)

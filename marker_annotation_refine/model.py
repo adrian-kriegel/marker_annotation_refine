@@ -63,27 +63,19 @@ class Decoder(nn.Module):
 
    return x
 
+def prep_input(marked_img, device):
+
+  return torch.from_numpy(marked_img).float().reshape((1, *marked_img.shape)).to(device)
+
 def train(
+  train_dataset : MarkerRefineDataset,
+  out_dir : str,
   nepochs = 400,
-  batch_size=1
+  report_fnc = None
 ):
 
   encoder = Encoder(60)
   decoder = Decoder(60)
-
-  from dotenv import load_dotenv
-
-  load_dotenv()
-
-  train_dataset = MarkerRefineDataset(
-    os.environ['CITYSCAPES_LOCATION'],
-    'train'
-  )
-
-  test_dataset = MarkerRefineDataset(
-    os.environ['CITYSCAPES_LOCATION'],
-    'test'
-  )
 
   loss_fn = nn.BCELoss()
   
@@ -111,7 +103,7 @@ def train(
     
       marked_img, gt = v
 
-      inp = torch.from_numpy(marked_img).float().reshape((1, *marked_img.shape)).to(device)
+      inp = prep_input(marked_img, device)
       optimizer.zero_grad()
       
       output = decoder.forward(encoder.forward(inp))
@@ -132,10 +124,24 @@ def train(
 
         print(f'{epoch}: {loss.item()}')
 
-        torch.save(encoder.state_dict(), './models/marker_refine_encoder.pt')
-        torch.save(decoder.state_dict(), './models/marker_refine_decoder.pt')
+        torch.save(encoder.state_dict(), os.path.join(out_dir, 'marker_refine_encoder.pt'))
+        torch.save(decoder.state_dict(), os.path.join(out_dir, 'marker_refine_decoder.pt'))
+
+        if not report_fnc == None:
+
+          report_fnc(inp, gt, output)
         
 
 if __name__ == '__main__':
 
-  train()
+  from dotenv import load_dotenv
+
+  load_dotenv()
+
+
+  train_dataset = MarkerRefineDataset(
+    os.environ['CITYSCAPES_LOCATION'],
+    'train'
+  )
+
+  train(train_dataset, './models/')

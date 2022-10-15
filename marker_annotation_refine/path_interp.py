@@ -1,8 +1,8 @@
 
-from tracemalloc import start
+import typing
 import numpy as np
 
-Point = tuple[int, int]
+Point = typing.Tuple[int, int]
 
 class PathInterp:
 
