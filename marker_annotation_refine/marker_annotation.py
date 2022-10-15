@@ -104,12 +104,6 @@ def draw_single_line(
     joint='curve'
   )
 
-def next_pow_2(x : float):
-
-  return int(
-    pow(2, math.ceil(math.log(x)/math.log(2)))
-  )
-
 def draw_marker(
   lines : typing.List[MarkerLine],
   padding : int,

@@ -8,8 +8,8 @@ from cityscapes_helpers import CSImage
 import matplotlib.pyplot as plt
 import matplotlib
 
-from marker_annotation import MarkerLine, draw_marker
-from geometry_util import mask_to_polygons, polygon_to_mask
+from marker_annotation import MarkerLine, draw_marker, draw_single_line
+from geometry_util import mask_to_polygons, draw_polygon
 from path_interp import PathInterp
 
 from cityscapesscripts.helpers.labels import id2label
@@ -136,7 +136,8 @@ class MarkerRefineDataset(torch.utils.data.Dataset):
     self,
     dataset_path : str,
     mode : str = 'train',
-    max_blur = 0.0
+    max_blur = 0.0,
+    gt_blur = 0.0
   ):
 
     self.dataset_path = dataset_path
@@ -144,6 +145,8 @@ class MarkerRefineDataset(torch.utils.data.Dataset):
     self.image_names = get_image_names(dataset_path, mode)
 
     self.max_blur = max_blur
+
+    self.gt_blur = gt_blur
   
   def __len__(self):
 
@@ -215,9 +218,12 @@ class MarkerRefineDataset(torch.utils.data.Dataset):
 
     instance_map = np.array(csimg.instance_id_map()) == instance_id
 
-    mask = polygon_to_mask(polygon, instance_map.shape)
+    # mask = polygon_to_mask(polygon, instance_map.shape)
     
-    mask_cropped = np.array(Image.fromarray(mask).crop(box), dtype=float)
+    gt_full = draw_polygon(polygon, instance_map.shape)
+
+
+    gt = np.array(gt_full.crop(box), dtype=float)
 
     marked_img = np.zeros(
       (4, marker.shape[0], marker.shape[1])
@@ -229,9 +235,11 @@ class MarkerRefineDataset(torch.utils.data.Dataset):
     marked_img[1,:,:] = img_cropped[:,:,1]
     marked_img[2,:,:] = img_cropped[:,:,2]
 
-    marked_img[3,:,:] = filters.gaussian(marker, np.min(marker.shape)*np.random.uniform(0, self.max_blur)) 
+    scale = np.min(marker.shape)
 
-    return marked_img, mask_cropped
+    marked_img[3,:,:] = filters.gaussian(marker, scale*np.random.uniform(0, self.max_blur)) 
+
+    return marked_img, filters.gaussian(gt, self.gt_blur*scale)
 
 def split_marked_image(inp):
 
@@ -257,7 +265,7 @@ if __name__ == '__main__':
 
   load_dotenv()
 
-  dataset = MarkerRefineDataset(os.environ['CITYSCAPES_LOCATION'], max_blur=0.05)
+  dataset = MarkerRefineDataset(os.environ['CITYSCAPES_LOCATION'], max_blur=0.05, gt_blur=0.05)
   
   for v in dataset:
 

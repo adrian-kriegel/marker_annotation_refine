@@ -36,7 +36,7 @@ matplotlib.use('TkAgg')
 thrs = 0.4
 
 conv_rate = 0.01
-num_iterations = 10
+num_iterations = 1
 
 masked_blur_sigma = 2
 masked_blur_rate = 0.3
@@ -79,7 +79,7 @@ for v in dataset:
     _inp[0, 3, :, :] = (1-conv_rate)*_inp[0, 3, :, :] + out_fb*conv_rate
 
   
-  out_img = gaussian(out_img, np.min(out_img.shape)*0.02)
+  #out_img = gaussian(out_img, np.min(out_img.shape)*0.02)
 
   inp = inp.cpu().detach().numpy()
 

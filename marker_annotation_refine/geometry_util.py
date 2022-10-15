@@ -1,6 +1,10 @@
 
+from PIL import ImageDraw, Image
+
 from rasterio import features, transform
 import numpy as np
+
+from marker_annotation import draw_single_line
 
 # list of np tuples
 Polygon = np.ndarray
@@ -49,3 +53,18 @@ def polygon_to_mask(polygon, shape):
     transform=transform.Affine(1.0, 0, 0, 0, 1.0, 0),
     invert=True
   )
+
+def draw_polygon(polygon, shape):
+
+  img = Image.new('F', (shape[1], shape[0]))
+
+  draw = ImageDraw.Draw(img)
+
+  draw_single_line(
+    draw,
+    0, 0,
+    1,
+    polygon
+  )
+  
+  return img
