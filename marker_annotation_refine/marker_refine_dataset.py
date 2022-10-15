@@ -12,7 +12,9 @@ from marker_annotation import MarkerLine, draw_marker
 from geometry_util import mask_to_polygons, polygon_to_mask
 from path_interp import PathInterp
 
-from cityscapesscripts.helpers.labels import id2label, Label
+from cityscapesscripts.helpers.labels import id2label
+
+from skimage import filters
 
 import torch.utils.data
 from glob import glob
@@ -133,12 +135,15 @@ class MarkerRefineDataset(torch.utils.data.Dataset):
   def __init__(
     self,
     dataset_path : str,
-    mode : str = 'train'
+    mode : str = 'train',
+    max_blur = 0.0
   ):
 
     self.dataset_path = dataset_path
 
     self.image_names = get_image_names(dataset_path, mode)
+
+    self.max_blur = max_blur
   
   def __len__(self):
 
@@ -224,27 +229,45 @@ class MarkerRefineDataset(torch.utils.data.Dataset):
     marked_img[1,:,:] = img_cropped[:,:,1]
     marked_img[2,:,:] = img_cropped[:,:,2]
 
-    marked_img[3,:,:] = marker 
+    marked_img[3,:,:] = filters.gaussian(marker, np.min(marker.shape)*np.random.uniform(0, self.max_blur)) 
 
     return marked_img, mask_cropped
 
+def split_marked_image(inp):
+
+  img = np.zeros((*inp.shape[2:4], 3))
+
+  img[:,:,0] = inp[0, 0, :, :]
+  img[:,:,1] = inp[0, 1, :, :]
+  img[:,:,2] = inp[0, 2, :, :]
+  img /= np.max(img)
+
+  marker = inp[0,3,:,:]
+  marker /= np.max(marker)
+
+  return img, marker
 
 
 if __name__ == '__main__':
 
   from dotenv import load_dotenv
+  from model import prep_input
 
   matplotlib.use('TkAgg')
 
   load_dotenv()
 
-  dataset = MarkerRefineDataset(os.environ['CITYSCAPES_LOCATION'])
-  print(dataset.image_names[0])
+  dataset = MarkerRefineDataset(os.environ['CITYSCAPES_LOCATION'], max_blur=0.05)
+  
   for v in dataset:
 
     if not v == None:
 
-      img, marker, gt = None# type: ignore # TODO
+      marked_img, gt = v
+
+      inp = prep_input(marked_img, 'cpu')
+
+      img, marker = split_marked_image(inp.detach().numpy())
 
       plt.subplot(1,3,1)
       plt.imshow(img)

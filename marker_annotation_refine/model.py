@@ -68,14 +68,13 @@ def prep_input(marked_img, device):
   return torch.from_numpy(marked_img).float().reshape((1, *marked_img.shape)).to(device)
 
 def train(
+  encoder, decoder,
   train_dataset : MarkerRefineDataset,
   out_dir : str,
   nepochs = 400,
   report_fnc = None
 ):
 
-  encoder = Encoder(60)
-  decoder = Decoder(60)
 
   loss_fn = nn.BCELoss()
   
@@ -144,4 +143,7 @@ if __name__ == '__main__':
     'train'
   )
 
-  train(train_dataset, './models/')
+  encoder = Encoder(60)
+  decoder = Decoder(60)
+
+  train(encoder, decoder, train_dataset, './models/')

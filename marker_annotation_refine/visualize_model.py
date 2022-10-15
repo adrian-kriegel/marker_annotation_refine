@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from geometry_util import mask_to_polygons
 
-from marker_refine_dataset import MarkerRefineDataset
+from marker_refine_dataset import MarkerRefineDataset, split_marked_image
 from model import Encoder, Decoder, prep_input
 from skimage.transform import resize
 from skimage.filters import gaussian
@@ -33,10 +33,10 @@ decoder.to('cpu')
 
 matplotlib.use('TkAgg')
 
-thrs = 0.5
+thrs = 0.6
 
-conv_rate = 0.1
-num_iterations = 20
+conv_rate = 0.3
+num_iterations = 3
 
 for v in dataset:
 
@@ -66,26 +66,23 @@ for v in dataset:
     out_img = gaussian(out_img, np.min(out_img.shape)*0.03)
 
 
-  img = np.zeros((*inp.shape[2:4], 3))
-
   inp = inp.cpu().detach().numpy()
 
-  img[:,:,0] = inp[0, 0, :, :]
-  img[:,:,1] = inp[0, 1, :, :]
-  img[:,:,2] = inp[0, 2, :, :]
-  img /= np.max(img)
-
-  marker = inp[0,3,:,:]
-  marker /= np.max(marker)
+  img,marker = split_marked_image(inp)  
 
   polygons = mask_to_polygons(out_img > thrs)
+
+  polygons_gt = mask_to_polygons(gt)
 
   plt.subplot(1,3,1)
   plt.imshow(img)
 
-  for polygon in polygons:
+  for polygon, polygon_gt in zip(polygons, polygons_gt):
     x,y = np.transpose(polygon)
-    plt.plot(x, y)
+    plt.plot(x, y, color='red')
+
+    x,y = np.transpose(polygon_gt)
+    plt.plot(x, y, color='green')
 
   plt.subplot(1,3,2)
   plt.imshow(marker)

@@ -3,3 +3,4 @@ python_env/
 .pytest_cache
 .env
 dataset/
+**/__pycache__
