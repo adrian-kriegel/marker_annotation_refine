@@ -63,16 +63,13 @@ class Decoder(nn.Module):
 
    return x
 
-def prep_input(marked_img, device):
-
-  return torch.from_numpy(marked_img).float().reshape((1, *marked_img.shape)).to(device)
 
 def train(
   encoder, decoder,
   train_dataset : MarkerRefineDataset,
   out_dir : str,
   nepochs = 400,
-  report_fnc = None
+  batch_size = 64
 ):
 
 
@@ -94,42 +91,35 @@ def train(
   encoder.train()
   decoder.train()
 
+  train_loader = DataLoader(train_dataset, batch_size=batch_size)
+
   for epoch in range(1, nepochs+1):
     i = 0
-    for v in train_dataset:
-      if v == None:
-        continue
-    
-      marked_img, gt = v
-
-      inp = prep_input(marked_img, device)
-      optimizer.zero_grad()
-      
-      output = decoder.forward(encoder.forward(inp))
-      
-      gt = torch.from_numpy(gt).float().reshape((1, *gt.shape)).to(device)
-
-      gt = transforms.Resize(output.shape[2:4])(gt)
-
-      loss = loss_fn(output[0], gt)
+    for marked_img, gt in train_loader:
 
       optimizer.zero_grad()
+      
+      output = decoder.forward(encoder.forward(marked_img.float().to(device)))
+
+      gt = gt.float().to(device)
+
+      if train_dataset.fixed_shape == None:
+        gt = transforms.Resize(output.shape[2:4])(gt)
+
+      loss = loss_fn(output, gt)
+
       loss.backward()
       optimizer.step()
 
       i += 1
 
-      if i % 100 == 0:
+      if i % 1 == 0:
 
         print(f'{epoch}: {loss.item()}')
 
         torch.save(encoder.state_dict(), os.path.join(out_dir, 'marker_refine_encoder.pt'))
         torch.save(decoder.state_dict(), os.path.join(out_dir, 'marker_refine_decoder.pt'))
 
-        if not report_fnc == None:
-
-          report_fnc(inp, gt, output)
-        
 
 if __name__ == '__main__':
 
@@ -137,13 +127,19 @@ if __name__ == '__main__':
 
   load_dotenv()
 
-
   train_dataset = MarkerRefineDataset(
     os.environ['CITYSCAPES_LOCATION'],
-    'train'
+    'train',
+    fixed_shape=(508,508)
   )
 
   encoder = Encoder(60)
   decoder = Decoder(60)
 
-  train(encoder, decoder, train_dataset, './models/')
+  train(
+    encoder,
+    decoder,
+    train_dataset,
+    './models/',
+    batch_size=12
+  )

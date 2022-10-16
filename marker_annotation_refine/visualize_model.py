@@ -7,7 +7,7 @@ import torch
 from geometry_util import mask_to_polygons
 
 from marker_refine_dataset import MarkerRefineDataset, split_marked_image
-from model import Encoder, Decoder, prep_input
+from model import Encoder, Decoder
 from skimage.transform import resize
 from skimage.filters import gaussian
 import dotenv
@@ -27,6 +27,9 @@ decoder = Decoder(60)
 decoder.load_state_dict(
   torch.load('models/marker_refine_decoder.pt', map_location=torch.device('cpu'))
 )
+
+encoder.eval()
+decoder.eval()
 
 encoder.to('cpu')
 decoder.to('cpu')
@@ -52,8 +55,8 @@ for v in dataset:
 
   marked_img, gt = v
 
-  inp = prep_input(marked_img, 'cpu')
- 
+  inp = torch.from_numpy(marked_img).float().reshape((1, *marked_img.shape))
+
   out_img = np.zeros(1)
   _inp = inp.clone()
 
@@ -65,7 +68,7 @@ for v in dataset:
     
     out_img = resize(
       out_img, 
-      gt.shape
+      gt.shape[1:3]
     )
 
     out_fb = torch.from_numpy(out_img)
@@ -89,7 +92,7 @@ for v in dataset:
 
   polygons_gt = mask_to_polygons(gt)
 
-  plt.subplot(1,3,1)
+  plt.subplot(2,2,1)
   plt.imshow(img)
 
   for polygon, polygon_gt in zip(polygons, polygons_gt):
@@ -99,10 +102,10 @@ for v in dataset:
     x,y = np.transpose(polygon_gt)
     plt.plot(x, y, color='green', alpha=0.7)
 
-  plt.subplot(1,3,2)
+  plt.subplot(2,2,2)
   plt.imshow(marker)
 
-  plt.subplot(1,3,3)
+  plt.subplot(2,2,3)
 
   blurred = np.zeros(img.shape)
   
@@ -113,5 +116,9 @@ for v in dataset:
   #plt.imshow(blurred)
 
   plt.imshow(out_img)
+
+  plt.subplot(2,2,4)
+
+  plt.imshow(gt[0])
 
   plt.show()

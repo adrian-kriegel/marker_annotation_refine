@@ -1,7 +1,8 @@
 
 import math
 import os
-from PIL import Image
+import re
+import typing
 
 import numpy as np
 from cityscapes_helpers import CSImage
@@ -14,7 +15,7 @@ from path_interp import PathInterp
 
 from cityscapesscripts.helpers.labels import id2label
 
-from skimage import filters
+from skimage import filters, transform
 
 import torch.utils.data
 from glob import glob
@@ -126,9 +127,29 @@ def get_image_names(dataset_path : str, mode : str):
     )
   ]
 
-class InvalidInstanceError(Exception):
+def resize_safe_single_channel(img : np.ndarray, shape : typing.Tuple[int, int]):
 
-  pass
+  # TODO: pad images to retain their aspect ratio
+  return transform.resize(img, shape)
+
+def resize_safe(
+  img : np.ndarray,
+  shape : typing.Tuple[int, int],
+):
+
+  if len(img.shape) == 2:
+
+    return resize_safe_single_channel(img, shape)
+
+  else:
+
+    res = np.zeros((img.shape[0], *shape))
+    
+    for c in range(img.shape[0]):
+
+      res[c,:,:] = resize_safe_single_channel(img[c,:,:], shape)
+
+    return res
 
 class MarkerRefineDataset(torch.utils.data.Dataset):
 
@@ -137,7 +158,9 @@ class MarkerRefineDataset(torch.utils.data.Dataset):
     dataset_path : str,
     mode : str = 'train',
     max_blur = 0.0,
-    gt_blur = 0.0
+    gt_blur = 0.0,
+    gt_blur_mix = 0.0,
+    fixed_shape = None
   ):
 
     self.dataset_path = dataset_path
@@ -147,6 +170,25 @@ class MarkerRefineDataset(torch.utils.data.Dataset):
     self.max_blur = max_blur
 
     self.gt_blur = gt_blur
+
+    self.gt_blur_mix = gt_blur_mix
+
+    self.fixed_shape = fixed_shape
+
+    self.default_value = self.build_default_value(
+      fixed_shape if not fixed_shape == None else (10,10)
+    )
+
+  def build_default_value(self, shape):
+
+    return (
+        np.zeros(
+        (4, *shape)
+      ),
+      np.zeros(
+        (1, *shape)
+      )
+    )
   
   def __len__(self):
 
@@ -177,7 +219,7 @@ class MarkerRefineDataset(torch.utils.data.Dataset):
 
     if label.category in IGNORE_LABELS:
 
-      return None
+      return self.default_value
       
     p0,p1,label_mask = csimg.instance_mask(instance_id)
  
@@ -210,7 +252,7 @@ class MarkerRefineDataset(torch.utils.data.Dataset):
       area < MIN_INSTANCE_AREA_PX or
       area/img_area > MAX_INSTANCE_AREA_RATIO 
     ):
-      return None
+      return self.default_value
 
     (mx, my), marker = draw_marker_from_polygon(x, y, CROP_PADDING*max(pw, ph))
 
@@ -224,7 +266,7 @@ class MarkerRefineDataset(torch.utils.data.Dataset):
 
 
     gt = np.array(gt_full.crop(box), dtype=float)
-
+    
     marked_img = np.zeros(
       (4, marker.shape[0], marker.shape[1])
     )
@@ -239,7 +281,20 @@ class MarkerRefineDataset(torch.utils.data.Dataset):
 
     marked_img[3,:,:] = filters.gaussian(marker, scale*np.random.uniform(0, self.max_blur)) 
 
-    return marked_img, filters.gaussian(gt, self.gt_blur*scale)
+    gt_blurred = self.gt_blur_mix * filters.gaussian(gt, self.gt_blur*scale) + \
+      (1 - self.gt_blur_mix) * gt
+    
+    gt_blurred = gt_blurred.reshape((1, *gt_blurred.shape))
+    
+    if self.fixed_shape == None:
+
+      return marked_img, gt_blurred
+
+    else:
+
+      return resize_safe(marked_img, self.fixed_shape), \
+        resize_safe(gt_blurred, self.fixed_shape)
+
 
 def split_marked_image(inp):
 
@@ -259,31 +314,34 @@ def split_marked_image(inp):
 if __name__ == '__main__':
 
   from dotenv import load_dotenv
-  from model import prep_input
 
   matplotlib.use('TkAgg')
 
   load_dotenv()
 
-  dataset = MarkerRefineDataset(os.environ['CITYSCAPES_LOCATION'], max_blur=0.05, gt_blur=0.05)
-  
+  dataset = MarkerRefineDataset(
+    os.environ['CITYSCAPES_LOCATION'],
+    max_blur=0.05,
+    gt_blur=0.05,
+    gt_blur_mix=0.4,
+    fixed_shape=(500, 500)
+  )
+
   for v in dataset:
 
-    if not v == None:
+    marked_img, gt = v
+    
+    #inp = prep_input(marked_img, 'cpu')
 
-      marked_img, gt = v
+    #img, marker = split_marked_image(inp.detach().numpy())
+  
+    plt.subplot(1,3,1)
+    plt.imshow(img)
 
-      inp = prep_input(marked_img, 'cpu')
+    plt.subplot(1,3,2)
+    plt.imshow(marker)
 
-      img, marker = split_marked_image(inp.detach().numpy())
+    plt.subplot(1,3,3)
+    plt.imshow(gt[0])
 
-      plt.subplot(1,3,1)
-      plt.imshow(img)
-
-      plt.subplot(1,3,2)
-      plt.imshow(marker)
-
-      plt.subplot(1,3,3)
-      plt.imshow(gt)
-
-      plt.show()
+    plt.show()
