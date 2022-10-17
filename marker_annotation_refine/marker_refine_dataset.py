@@ -5,13 +5,8 @@ import re
 import typing
 
 import numpy as np
-from cityscapes_helpers import CSImage
 import matplotlib.pyplot as plt
 import matplotlib
-
-from marker_annotation import MarkerLine, draw_marker, draw_single_line
-from geometry_util import mask_to_polygons, draw_polygon
-from path_interp import PathInterp
 
 from cityscapesscripts.helpers.labels import id2label
 
@@ -19,6 +14,12 @@ from skimage import filters, transform
 
 import torch.utils.data
 from glob import glob
+
+
+from marker_annotation_refine.cityscapes_helpers import CSImage
+from marker_annotation_refine.path_interp import PathInterp
+from marker_annotation_refine.geometry_util import mask_to_polygons, draw_polygon
+from marker_annotation_refine.marker_annotation import MarkerLine, draw_marker, draw_single_line
 
 IGNORE_LABELS = ['unlabeled', 'rectification border', 'out of roi', 'static', 'dynamic']
 

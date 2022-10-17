@@ -17,6 +17,7 @@ idna==3.4
 imageio==2.22.1
 iniconfig==1.1.1
 kiwisolver==1.4.4
+marker-annotation-refine @ file:///home/adrian/coding/unologin/%40pplns/marker_annotation_refine
 matplotlib==3.6.1
 networkx==2.8.7
 numpy==1.23.4

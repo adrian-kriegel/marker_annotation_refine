@@ -4,3 +4,4 @@ python_env/
 .env
 dataset/
 **/__pycache__
+*.egg-info

@@ -3,8 +3,9 @@ from PIL import ImageDraw, Image
 
 from rasterio import features, transform
 import numpy as np
+from scipy.spatial import distance_matrix
 
-from marker_annotation import draw_single_line
+from marker_annotation_refine.marker_annotation import draw_single_line
 
 # list of np tuples
 Polygon = np.ndarray
@@ -68,3 +69,29 @@ def draw_polygon(polygon, shape):
   )
   
   return img
+
+
+def calc_polygon_order(
+  p1 : np.ndarray,
+  p2 : np.ndarray,
+):
+  '''
+  Re-orders points in p1 such that min|p1[i] - p2[i]| for all i
+  '''
+
+  new_order = [0]*len(p1)
+
+  dist = distance_matrix(p1, p2)
+
+  for i,p in enumerate(p1):
+
+    new_order[i] = np.argmin(dist[i]).item()
+
+  return new_order
+
+def order_polygon(
+  p1 : np.ndarray,
+  p2 : np.ndarray,
+):
+
+  return p1[calc_polygon_order(p1, p2)]

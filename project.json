@@ -1,5 +1,8 @@
 {
     "name": "marker_annotation_refine",
     "version": "1.0.0",
-    "modules": []
+    "modules": [
+        "cityscapes_helpers",
+        "marker_annotation"
+    ]
 }

@@ -5,9 +5,12 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
-from pyramid_pooling import PyramidPooling
 
-from marker_refine_dataset import \
+from marker_annotation_refine.geometry_util import order_polygon
+
+from marker_annotation_refine.pyramid_pooling import PyramidPooling
+
+from marker_annotation_refine.marker_refine_dataset import \
   MarkerRefineDataset
 
 class Encoder(nn.Module):
@@ -136,6 +139,13 @@ def train(
       if train_dataset.fixed_shape == None and not train_dataset.return_polygon:
         gt = transforms.Resize(output.shape[2:4])(gt)
 
+
+      if train_dataset.return_polygon:
+        output_cpu = output.cpu().detach().numpy()
+        # for each batch, adjust the polygon
+        for i in range(len(gt)):
+
+          gt[i] = order_polygon(gt[i], output_cpu[i])
       
       loss = loss_fn(output, gt)
 

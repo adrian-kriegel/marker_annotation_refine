@@ -7,7 +7,7 @@ import torch
 from geometry_util import mask_to_polygons
 
 from marker_refine_dataset import MarkerRefineDataset, split_marked_image
-from model import Encoder, Decoder, PolygonDecoder
+from marker_annotation_refine.model import Encoder, PolygonDecoder
 from skimage.transform import resize
 from skimage.filters import gaussian
 import dotenv
