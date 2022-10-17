@@ -1,5 +1,6 @@
 
 import os
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -146,6 +147,11 @@ def train(
   for epoch in range(1, nepochs+1):
     i = 0
     for marked_img, gt in train_loader:
+
+      # TODO: use collate_fn to filter out bad data points
+      if (np.sum(gt) == 0):
+
+        continue
 
       optimizer.zero_grad()
       

@@ -4,13 +4,13 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from geometry_util import mask_to_polygons
-
-from marker_refine_dataset import MarkerRefineDataset, split_marked_image
-from marker_annotation_refine.model import Encoder, PolygonDecoder
-from skimage.transform import resize
 from skimage.filters import gaussian
 import dotenv
+
+
+from marker_annotation_refine.marker_refine_dataset import MarkerRefineDataset, split_marked_image
+from marker_annotation_refine.geometry_util import mask_to_polygons
+from marker_annotation_refine.model import Encoder, PolygonDecoder
 
 dotenv.load_dotenv()
 
