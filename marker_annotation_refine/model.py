@@ -90,15 +90,15 @@ class PolygonDecoder(nn.Module):
       
       
       nn.ReLU(True),
-      nn.Linear(pyramid_output_size,  int(0.5 * pyramid_output_size + 0.5*n)),
+      nn.Linear(int(0.75 * pyramid_output_size + 0.25*n),  int(0.5 * pyramid_output_size + 0.5*n)),
       
       
       nn.ReLU(True),
-      nn.Linear(pyramid_output_size,  int(0.25 * pyramid_output_size + 0.75*n)),
+      nn.Linear(int(0.5 * pyramid_output_size + 0.5*n),  int(0.25 * pyramid_output_size + 0.75*n)),
       
       
       nn.ReLU(True),
-      nn.Linear(pyramid_output_size, n)
+      nn.Linear(int(0.25 * pyramid_output_size + 0.75*n), n)
     )
 
     self.filter_size = filter_size
