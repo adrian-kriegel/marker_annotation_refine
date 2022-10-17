@@ -78,10 +78,27 @@ class PolygonDecoder(nn.Module):
 
     self.num_points = num_points
 
+    n = num_points*2
+    
     self.decoder_pyramid = nn.Sequential(
       pyramid,
       nn.ReLU(True),
-      nn.Linear(pyramid_output_size, num_points*2)
+      nn.Linear(pyramid_output_size, pyramid_output_size),
+      
+      nn.ReLU(True),
+      nn.Linear(pyramid_output_size, int(0.75 * pyramid_output_size + 0.25*n)),
+      
+      
+      nn.ReLU(True),
+      nn.Linear(pyramid_output_size,  int(0.5 * pyramid_output_size + 0.5*n)),
+      
+      
+      nn.ReLU(True),
+      nn.Linear(pyramid_output_size,  int(0.25 * pyramid_output_size + 0.75*n)),
+      
+      
+      nn.ReLU(True),
+      nn.Linear(pyramid_output_size, n)
     )
 
     self.filter_size = filter_size
