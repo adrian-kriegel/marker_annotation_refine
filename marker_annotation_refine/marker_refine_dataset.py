@@ -160,7 +160,10 @@ class MarkerRefineDataset(torch.utils.data.Dataset):
     max_blur = 0.0,
     gt_blur = 0.0,
     gt_blur_mix = 0.0,
-    fixed_shape = None
+    fixed_shape = None,
+    # set to true to return polygon as gt instead of image
+    return_polygon = False,
+    polygon_length = 100
   ):
 
     self.dataset_path = dataset_path
@@ -175,9 +178,16 @@ class MarkerRefineDataset(torch.utils.data.Dataset):
 
     self.fixed_shape = fixed_shape
 
+    self.return_polygon = return_polygon
+    self.polygon_length = polygon_length
+
     self.default_value = self.build_default_value(
       fixed_shape if not fixed_shape == None else (10,10)
     )
+
+    if not fixed_shape == None and return_polygon:
+
+      raise Exception('Cannot use fixed shapes when returning polygons.')
 
   def build_default_value(self, shape):
 
@@ -185,6 +195,9 @@ class MarkerRefineDataset(torch.utils.data.Dataset):
         np.zeros(
         (4, *shape)
       ),
+      np.zeros(
+        (self.polygon_length, 2)
+      ) if self.return_polygon else \
       np.zeros(
         (1, *shape)
       )
@@ -234,6 +247,10 @@ class MarkerRefineDataset(torch.utils.data.Dataset):
  
     x,y = np.transpose(polygon)
 
+    polygon = PathInterp(x, y)(np.linspace(0, 1, self.polygon_length))
+    
+    x,y = np.transpose(polygon)
+
     # no idea why that is required sometimes
     x = np.array(x)
     y = np.array(y)
@@ -259,20 +276,13 @@ class MarkerRefineDataset(torch.utils.data.Dataset):
     box = (mx, my, mx + marker.shape[1], my + marker.shape[0])
 
     instance_map = np.array(csimg.instance_id_map()) == instance_id
-
-    # mask = polygon_to_mask(polygon, instance_map.shape)
-    
-    gt_full = draw_polygon(polygon, instance_map.shape)
-
-
-    gt = np.array(gt_full.crop(box), dtype=float)
     
     marked_img = np.zeros(
       (4, marker.shape[0], marker.shape[1])
     )
 
     img_cropped = np.array(csimg.img().crop(box))
-
+    
     marked_img[0,:,:] = img_cropped[:,:,0]
     marked_img[1,:,:] = img_cropped[:,:,1]
     marked_img[2,:,:] = img_cropped[:,:,2]
@@ -281,19 +291,35 @@ class MarkerRefineDataset(torch.utils.data.Dataset):
 
     marked_img[3,:,:] = filters.gaussian(marker, scale*np.random.uniform(0, self.max_blur)) 
 
-    gt_blurred = self.gt_blur_mix * filters.gaussian(gt, self.gt_blur*scale) + \
+    if self.return_polygon:
+
+      # move origin to box corner
+      gt = polygon - np.array((mx, my))
+
+      # normalize coordinates between 0 and 1
+      gt[:,0] /= marker.shape[1]
+      gt[:,1] /= marker.shape[0]
+
+    else: 
+
+      gt_full = draw_polygon(polygon, instance_map.shape)
+
+
+      gt = np.array(gt_full.crop(box), dtype=float)
+
+      gt = self.gt_blur_mix * filters.gaussian(gt, self.gt_blur*scale) + \
       (1 - self.gt_blur_mix) * gt
     
-    gt_blurred = gt_blurred.reshape((1, *gt_blurred.shape))
+      gt = gt.reshape((1, *gt.shape))
     
     if self.fixed_shape == None:
 
-      return marked_img, gt_blurred
+      return marked_img, gt
 
     else:
 
       return resize_safe(marked_img, self.fixed_shape), \
-        resize_safe(gt_blurred, self.fixed_shape)
+        resize_safe(gt, self.fixed_shape)
 
 
 def split_marked_image(inp):
@@ -324,24 +350,28 @@ if __name__ == '__main__':
     max_blur=0.05,
     gt_blur=0.05,
     gt_blur_mix=0.4,
-    fixed_shape=(500, 500)
+    #fixed_shape=(500, 500),
+    return_polygon=True
   )
 
   for v in dataset:
 
     marked_img, gt = v
-    
-    #inp = prep_input(marked_img, 'cpu')
-
-    #img, marker = split_marked_image(inp.detach().numpy())
   
-    plt.subplot(1,3,1)
-    plt.imshow(img)
+    img = np.zeros((*marked_img.shape[1:3], 3))
+    img[:,:,0] = marked_img[0,:,:]
+    img[:,:,1] = marked_img[1,:,:]
+    img[:,:,2] = marked_img[2,:,:]
+    
+    x,y = np.transpose(gt)
 
-    plt.subplot(1,3,2)
-    plt.imshow(marker)
+    plt.subplot(1,2,1)
 
-    plt.subplot(1,3,3)
-    plt.imshow(gt[0])
+    plt.imshow(img/np.max(img))
+    plt.plot(x*img.shape[1], y*img.shape[0])
+    
+    plt.subplot(1,2,2)
+
+    plt.imshow(marked_img[3]/np.max(marked_img[3]))
 
     plt.show()

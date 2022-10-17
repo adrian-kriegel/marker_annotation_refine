@@ -7,26 +7,37 @@ import torch
 from geometry_util import mask_to_polygons
 
 from marker_refine_dataset import MarkerRefineDataset, split_marked_image
-from model import Encoder, Decoder
+from model import Encoder, Decoder, PolygonDecoder
 from skimage.transform import resize
 from skimage.filters import gaussian
 import dotenv
 
 dotenv.load_dotenv()
 
+polygon_length = 100
+
 dataset = MarkerRefineDataset(
   os.environ['CITYSCAPES_LOCATION'],
-  'val'
+  'val',
+  return_polygon=True,
+  polygon_length=100,
 )
 
 encoder = Encoder(60)
-encoder.load_state_dict(
-  torch.load('models/marker_refine_encoder.pt', map_location=torch.device('cpu'))
-)
-decoder = Decoder(60)
-decoder.load_state_dict(
-  torch.load('models/marker_refine_decoder.pt', map_location=torch.device('cpu'))
-)
+decoder = PolygonDecoder(num_points=polygon_length)
+
+try:
+
+  encoder.load_state_dict(
+    torch.load('models_polygon/marker_refine_encoder.pt', map_location=torch.device('cpu'))
+  )
+
+  decoder.load_state_dict(
+    torch.load('models_polygon/marker_refine_decoder.pt', map_location=torch.device('cpu'))
+  )
+
+except OSError:
+  pass
 
 encoder.eval()
 decoder.eval()
@@ -60,27 +71,9 @@ for v in dataset:
   out_img = np.zeros(1)
   _inp = inp.clone()
 
-  for i in range(num_iterations):
+  output = None
 
-    output = decoder.forward(encoder.forward(_inp))
-  
-    out_img = output[0].cpu().detach().numpy().reshape(output.shape[2:4])
-    
-    out_img = resize(
-      out_img, 
-      gt.shape[1:3]
-    )
-
-    out_fb = torch.from_numpy(out_img)
-
-    blur_mask = (1 - out_fb)*masked_blur_rate
-
-    _inp[0, 0, :, :] = masked_blur(_inp[0, 0, :, :], blur_mask, masked_blur_sigma)
-    _inp[0, 1, :, :] = masked_blur(_inp[0, 1, :, :], blur_mask, masked_blur_sigma)
-    _inp[0, 2, :, :] = masked_blur(_inp[0, 2, :, :], blur_mask, masked_blur_sigma)
-
-    _inp[0, 3, :, :] = (1-conv_rate)*_inp[0, 3, :, :] + out_fb*conv_rate
-
+  output = decoder.forward(encoder.forward(_inp))
   
   #out_img = gaussian(out_img, np.min(out_img.shape)*0.02)
 
@@ -88,37 +81,23 @@ for v in dataset:
 
   img,marker = split_marked_image(inp)  
 
-  polygons = mask_to_polygons(out_img > thrs)
+  polygons = mask_to_polygons(out_img > thrs) if not dataset.return_polygon else \
+              output.cpu().detach().numpy()
 
-  polygons_gt = mask_to_polygons(gt)
+  polygons_gt = [gt]
 
   plt.subplot(2,2,1)
   plt.imshow(img)
 
   for polygon, polygon_gt in zip(polygons, polygons_gt):
     x,y = np.transpose(polygon)
-    plt.plot(x, y, color='red')
+    plt.plot(x*marker.shape[1], y*marker.shape[0], color='red')
 
     x,y = np.transpose(polygon_gt)
-    plt.plot(x, y, color='green', alpha=0.7)
+    plt.plot(x*marker.shape[1], y*marker.shape[0], color='green', alpha=0.7)
 
   plt.subplot(2,2,2)
   plt.imshow(marker)
 
-  plt.subplot(2,2,3)
-
-  blurred = np.zeros(img.shape)
   
-  blurred[:,:,0] = masked_blur(img[:,:,0], 1 - out_img, 10)
-  blurred[:,:,1] = masked_blur(img[:,:,1], 1 - out_img, 10)
-  blurred[:,:,2] = masked_blur(img[:,:,2], 1 - out_img, 10)
-
-  #plt.imshow(blurred)
-
-  plt.imshow(out_img)
-
-  plt.subplot(2,2,4)
-
-  plt.imshow(gt[0])
-
   plt.show()

@@ -1,16 +1,11 @@
 
 import os
-from matplotlib import image
-
-import numpy as np
-
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import DataLoader, dataloader
+from torch.utils.data import DataLoader
 from torchvision import transforms
 
-from PIL import Image
+from pyramid_pooling import PyramidPooling
 
 from marker_refine_dataset import \
   MarkerRefineDataset
@@ -34,35 +29,70 @@ class Encoder(nn.Module):
         
   def forward(self, x):
     x = self.encoder_cnn(x)
-
+    
     return x
 
 class Decoder(nn.Module):
     
   def __init__(self, encoded_space_dim):
 
-   super().__init__()
-
-   self.decoder_conv = nn.Sequential(
-     nn.ConvTranspose2d(32, 16, 3, 
-     stride=2, output_padding=0),
-     nn.BatchNorm2d(16),
-     nn.ReLU(True),
-     nn.ConvTranspose2d(16, 8, 3, stride=2, 
-     padding=1, output_padding=1),
-     nn.BatchNorm2d(8),
-     nn.ReLU(True),
-     nn.ConvTranspose2d(8, 1, 3, stride=2, 
-     padding=1, output_padding=1)
-   )
+    super().__init__()
+  
+    self.decoder_conv = nn.Sequential(
+      nn.ConvTranspose2d(32, 16, 3, 
+      stride=2, output_padding=0),
+      nn.BatchNorm2d(16),
+      nn.ReLU(True),
+      nn.ConvTranspose2d(16, 8, 3, stride=2, 
+      padding=1, output_padding=1),
+      nn.BatchNorm2d(8),
+      nn.ReLU(True),
+      nn.ConvTranspose2d(8, 1, 3, stride=2, 
+      padding=1, output_padding=1)
+    )
        
   def forward(self, x):
 
-   x = self.decoder_conv(x)
-   x = torch.sigmoid(x)
+    x = self.decoder_conv(x)
+    x = torch.sigmoid(x)
+ 
+    return x
 
-   return x
+class PolygonDecoder(nn.Module):
 
+  def __init__(
+    self,
+    num_points = 100,
+    # last conv layer size
+    filter_size = 32
+  ):
+
+    super().__init__()
+
+    pyramid = PyramidPooling([5, 4])
+
+    pyramid_output_size = pyramid.get_output_size(filter_size)
+
+    self.num_points = num_points
+
+    self.decoder_pyramid = nn.Sequential(
+      pyramid,
+      nn.ReLU(True),
+      nn.Linear(pyramid_output_size, num_points*2)
+    )
+
+    self.filter_size = filter_size
+
+  def forward(self, x):
+
+    x = self.decoder_pyramid(x)
+
+    x = torch.sigmoid(x)
+
+    # shape = (batch, 2*num_points) -> (batch, num_points, 2)
+    x = x.reshape((x.shape[0], self.num_points, 2))
+    
+    return x
 
 def train(
   encoder, decoder,
@@ -73,7 +103,7 @@ def train(
 ):
 
 
-  loss_fn = nn.BCELoss()
+  loss_fn =  nn.MSELoss() if train_dataset.return_polygon else nn.BCELoss()
   
   optimizer = torch.optim.Adam(
     [
@@ -102,10 +132,11 @@ def train(
       output = decoder.forward(encoder.forward(marked_img.float().to(device)))
 
       gt = gt.float().to(device)
-
-      if train_dataset.fixed_shape == None:
+      
+      if train_dataset.fixed_shape == None and not train_dataset.return_polygon:
         gt = transforms.Resize(output.shape[2:4])(gt)
 
+      
       loss = loss_fn(output, gt)
 
       loss.backward()
@@ -113,7 +144,7 @@ def train(
 
       i += 1
 
-      if i % 1 == 0:
+      if i % 100 == 0:
 
         print(f'{epoch}: {loss.item()}')
 
