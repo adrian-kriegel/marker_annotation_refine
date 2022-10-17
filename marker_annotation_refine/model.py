@@ -73,7 +73,7 @@ class PolygonDecoder(nn.Module):
 
     super().__init__()
 
-    pyramid = PyramidPooling([5, 4])
+    pyramid = PyramidPooling([5])
 
     pyramid_output_size = pyramid.get_output_size(filter_size)
 
@@ -84,22 +84,11 @@ class PolygonDecoder(nn.Module):
     self.decoder_pyramid = nn.Sequential(
       pyramid,
       nn.ReLU(True),
-      nn.Linear(pyramid_output_size, pyramid_output_size),
+      
+      nn.Linear(pyramid_output_size,  int(0.5 * pyramid_output_size + 0.5*n)),
       
       nn.ReLU(True),
-      nn.Linear(pyramid_output_size, int(0.75 * pyramid_output_size + 0.25*n)),
-      
-      
-      nn.ReLU(True),
-      nn.Linear(int(0.75 * pyramid_output_size + 0.25*n),  int(0.5 * pyramid_output_size + 0.5*n)),
-      
-      
-      nn.ReLU(True),
-      nn.Linear(int(0.5 * pyramid_output_size + 0.5*n),  int(0.25 * pyramid_output_size + 0.75*n)),
-      
-      
-      nn.ReLU(True),
-      nn.Linear(int(0.25 * pyramid_output_size + 0.75*n), n)
+      nn.Linear(int(0.5 * pyramid_output_size + 0.5*n), n)
     )
 
     self.filter_size = filter_size
@@ -149,7 +138,7 @@ def train(
     for marked_img, gt in train_loader:
 
       # TODO: use collate_fn to filter out bad data points
-      if (np.sum(gt) == 0):
+      if (np.sum(gt.numpy()) == 0):
 
         continue
 
@@ -177,7 +166,7 @@ def train(
 
       i += 1
 
-      if i % 100 == 0:
+      if i % 1 == 0:
 
         print(f'{epoch}: {loss.item()}')
 
