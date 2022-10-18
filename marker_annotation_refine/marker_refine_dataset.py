@@ -27,6 +27,8 @@ IGNORE_LABELS = ['unlabeled', 'rectification border', 'out of roi', 'static', 'd
 CROP_PADDING = 0.2
 
 MIN_INSTANCE_AREA_PX = 12*12
+MIN_INSTANCE_WIDTH_PX = 14
+MIN_INSTANCE_HEIGHT_PX = 14
 MAX_INSTANCE_AREA_RATIO = 0.9
 
 def normalize(v):
@@ -276,7 +278,10 @@ class MarkerRefineDataset(torch.utils.data.Dataset):
 
     if (
       area < MIN_INSTANCE_AREA_PX or
-      area/img_area > MAX_INSTANCE_AREA_RATIO 
+      area/img_area > MAX_INSTANCE_AREA_RATIO or
+      # TODO: if this happens, just pad the image!
+      pw < MIN_INSTANCE_WIDTH_PX or
+      ph < MIN_INSTANCE_HEIGHT_PX
     ):
       return self.default_value
 

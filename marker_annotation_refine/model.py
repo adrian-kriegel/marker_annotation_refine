@@ -20,13 +20,14 @@ class Encoder(nn.Module):
     super().__init__()
     
     self.encoder_cnn = nn.Sequential(
-      nn.Conv2d(4, 8, 3, stride=2, padding=1),
+      nn.Conv2d(4, 8, 4, stride=2, padding=1),
       nn.ReLU(True),
       nn.Conv2d(8, 16, 3, stride=2, padding=1),
       nn.BatchNorm2d(16),
       nn.ReLU(True),
       nn.Conv2d(16, 32, 3, stride=2, padding=0),
-      nn.ReLU(True)
+      nn.ReLU(True),
+      
     )
     
         
@@ -42,16 +43,27 @@ class Decoder(nn.Module):
     super().__init__()
   
     self.decoder_conv = nn.Sequential(
-      nn.ConvTranspose2d(32, 16, 3, 
-      stride=2, output_padding=0),
+      nn.ConvTranspose2d(
+        32, 16, 3, 
+        stride=2,
+        output_padding=0
+      ),
       nn.BatchNorm2d(16),
       nn.ReLU(True),
-      nn.ConvTranspose2d(16, 8, 3, stride=2, 
-      padding=1, output_padding=1),
+
+      nn.ConvTranspose2d(
+        16, 8, 8, 
+        stride=2,
+        output_padding=0
+      ),
       nn.BatchNorm2d(8),
       nn.ReLU(True),
-      nn.ConvTranspose2d(8, 1, 3, stride=2, 
-      padding=1, output_padding=1)
+
+      nn.ConvTranspose2d(
+        8, 1, 3, 
+        stride=2,
+        output_padding=0
+      ),
     )
        
   def forward(self, x):
