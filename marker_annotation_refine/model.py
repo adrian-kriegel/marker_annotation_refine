@@ -16,10 +16,9 @@ from marker_annotation_refine.marker_refine_dataset import \
 
 class Encoder(nn.Module):
     
-  def __init__(self, encoded_space_dim):
+  def __init__(self):
     super().__init__()
     
-    ### Convolutional section
     self.encoder_cnn = nn.Sequential(
       nn.Conv2d(4, 8, 3, stride=2, padding=1),
       nn.ReLU(True),
@@ -38,7 +37,7 @@ class Encoder(nn.Module):
 
 class Decoder(nn.Module):
     
-  def __init__(self, encoded_space_dim):
+  def __init__(self):
 
     super().__init__()
   
@@ -109,7 +108,8 @@ def train(
   train_dataset : MarkerRefineDataset,
   out_dir : str,
   nepochs = 400,
-  batch_size = 64
+  batch_size = 64,
+  report_interval = 100
 ):
 
 
@@ -135,10 +135,12 @@ def train(
 
   for epoch in range(1, nepochs+1):
     i = 0
+    # loss sum for reporting interval
+    loss_sum = 0
     for marked_img, gt in train_loader:
 
       # TODO: use collate_fn to filter out bad data points
-      if (np.sum(gt.numpy()) == 0):
+      if train_dataset.return_polygon and (np.sum(gt.numpy()) == 0):
 
         continue
 
@@ -154,21 +156,26 @@ def train(
 
       if train_dataset.return_polygon:
         output_cpu = output.cpu().detach().numpy()
+        gt_cpu = gt.cpu().detach().numpy()
         # for each batch, adjust the polygon
-        for i in range(len(gt)):
+        for j in range(len(gt_cpu)):
 
-          gt[i] = order_polygon(gt[i], output_cpu[i])
+          gt[j] = order_polygon(gt_cpu[j], output_cpu[j])
+
+        gt = torch.from_numpy(gt).to(device)
       
       loss = loss_fn(output, gt)
 
       loss.backward()
       optimizer.step()
+      loss_sum +=loss.item();
 
       i += 1
 
-      if i % 1 == 0:
+      if i % report_interval == 0:
 
-        print(f'{epoch}: {loss.item()}')
+        print(f'{epoch}: {loss_sum/report_interval}')
+        loss_sum = 0
 
         torch.save(encoder.state_dict(), os.path.join(out_dir, 'marker_refine_encoder.pt'))
         torch.save(decoder.state_dict(), os.path.join(out_dir, 'marker_refine_decoder.pt'))
@@ -186,8 +193,8 @@ if __name__ == '__main__':
     fixed_shape=(508,508)
   )
 
-  encoder = Encoder(60)
-  decoder = Decoder(60)
+  encoder = Encoder()
+  decoder = Decoder()
 
   train(
     encoder,

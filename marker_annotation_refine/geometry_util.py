@@ -55,7 +55,7 @@ def polygon_to_mask(polygon, shape):
     invert=True
   )
 
-def draw_polygon(polygon, shape):
+def draw_polygon(polygon, shape, width=1):
 
   img = Image.new('F', (shape[1], shape[0]))
 
@@ -64,7 +64,7 @@ def draw_polygon(polygon, shape):
   draw_single_line(
     draw,
     0, 0,
-    1,
+    width,
     polygon
   )
   

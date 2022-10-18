@@ -1,8 +1,8 @@
 
 import math
 import os
-import re
 import typing
+from glob import glob
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -13,12 +13,12 @@ from cityscapesscripts.helpers.labels import id2label
 from skimage import filters, transform
 
 import torch.utils.data
-from glob import glob
 
+from PIL import Image
 
 from marker_annotation_refine.cityscapes_helpers import CSImage
 from marker_annotation_refine.path_interp import PathInterp
-from marker_annotation_refine.geometry_util import mask_to_polygons, draw_polygon
+from marker_annotation_refine.geometry_util import mask_to_polygons, draw_polygon, polygon_to_mask
 from marker_annotation_refine.marker_annotation import MarkerLine, draw_marker, draw_single_line
 
 IGNORE_LABELS = ['unlabeled', 'rectification border', 'out of roi', 'static', 'dynamic']
@@ -164,8 +164,16 @@ class MarkerRefineDataset(torch.utils.data.Dataset):
     fixed_shape = None,
     # set to true to return polygon as gt instead of image
     return_polygon = False,
-    polygon_length = 100
+    polygon_length = 100,
+    # relationship between infill and border intensity of gt image
+    gt_fill_amount = 0.5,
+    # width of the polygon border in gt image
+    gt_line_width = 0.05
   ):
+
+    self.gt_line_width = gt_line_width
+
+    self.gt_fill_amount = gt_fill_amount
 
     self.dataset_path = dataset_path
 
@@ -302,11 +310,18 @@ class MarkerRefineDataset(torch.utils.data.Dataset):
       gt[:,1] /= marker.shape[0]
 
     else: 
+      fa = self.gt_fill_amount
 
-      gt_full = draw_polygon(polygon, instance_map.shape)
+      gt_full = (1-fa)*np.array(
+        draw_polygon(
+          polygon, 
+          instance_map.shape, 
+          int(self.gt_line_width*scale)
+        )
+      )
+      gt_full += fa*polygon_to_mask(polygon, instance_map.shape)
 
-
-      gt = np.array(gt_full.crop(box), dtype=float)
+      gt = np.array(Image.fromarray(gt_full).crop(box), dtype=float)
 
       gt = self.gt_blur_mix * filters.gaussian(gt, self.gt_blur*scale) + \
       (1 - self.gt_blur_mix) * gt
@@ -350,9 +365,10 @@ if __name__ == '__main__':
     os.environ['CITYSCAPES_LOCATION'],
     max_blur=0.05,
     gt_blur=0.05,
-    gt_blur_mix=0.4,
+    gt_blur_mix=0.9,
+    gt_fill_amount=0.2
     #fixed_shape=(500, 500),
-    return_polygon=True
+    #return_polygon=True
   )
 
   for v in dataset:
@@ -363,16 +379,23 @@ if __name__ == '__main__':
     img[:,:,0] = marked_img[0,:,:]
     img[:,:,1] = marked_img[1,:,:]
     img[:,:,2] = marked_img[2,:,:]
-    
-    x,y = np.transpose(gt)
 
-    plt.subplot(1,2,1)
+    plt.subplot(1,3,1)
 
     plt.imshow(img/np.max(img))
-    plt.plot(x*img.shape[1], y*img.shape[0])
     
-    plt.subplot(1,2,2)
+    if dataset.return_polygon:    
+      x,y = np.transpose(gt)
+      plt.plot(x*img.shape[1], y*img.shape[0])
+    
+    plt.subplot(1,3,2)
 
     plt.imshow(marked_img[3]/np.max(marked_img[3]))
+
+    plt.subplot(1,3,3)
+
+    if not dataset.return_polygon:
+
+      plt.imshow(gt[0])
 
     plt.show()

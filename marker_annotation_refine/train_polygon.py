@@ -17,7 +17,7 @@ train_dataset = MarkerRefineDataset(
   polygon_length=polygon_length
 )
 
-encoder = Encoder(60)
+encoder = Encoder()
 decoder = PolygonDecoder(num_points=polygon_length)
 
 try:
