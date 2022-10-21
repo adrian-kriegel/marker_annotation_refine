@@ -10,21 +10,17 @@ import matplotlib
 
 from cityscapesscripts.helpers.labels import id2label
 
-from skimage import filters, transform
-
-import torch.utils.data
-
-from PIL import Image
+from skimage import transform
 
 from marker_annotation_refine.cityscapes_helpers import CSImage
 from marker_annotation_refine.path_interp import PathInterp
 from marker_annotation_refine.geometry_util import mask_to_polygons, draw_polygon, polygon_to_mask
-from marker_annotation_refine.marker_annotation import MarkerLine, draw_marker, draw_single_line
+from marker_annotation_refine.marker_annotation import MarkerLine, Point, draw_marker, draw_single_line
 
 IGNORE_LABELS = ['unlabeled', 'rectification border', 'out of roi', 'static', 'dynamic']
 
-# crop regions 20% larger than required by the marker
-CROP_PADDING = 0.2
+# crop regions 30% larger than required by the marker
+CROP_PADDING = 0.3
 
 MIN_INSTANCE_AREA_PX = 12*12
 MIN_INSTANCE_WIDTH_PX = 14
@@ -83,37 +79,6 @@ def simulate_marker(
     't': True,
   }
 
-def draw_marker_from_polygon(
-  x,y,
-  padding : int
-):
-  x0 = np.min(x)
-  x1 = np.max(x)
-  y0 = np.min(y)
-  y1 = np.max(y)
-
-  lines = []
-
-  # scale in order to normalize things to the size of the polygon
-  scale = min((x1 - x0), (y1 - y0))
-
-  for i in range(6):
-
-    brush_size = math.floor(scale / np.random.uniform(1, 4))
-
-    line = simulate_marker(
-      x,y,
-      100,
-      brush_size,
-      np.random.uniform(0.001, 0.005)*scale,
-      np.random.uniform(0.05, 0.2)*scale,
-      np.random.uniform(0, 2*np.pi),
-      low_pass_factor=np.random.uniform(10, 100)
-    )
-
-    lines.append(line)
-
-  return draw_marker(lines, padding)
 
 
 def get_image_names(dataset_path : str, mode : str):
@@ -154,208 +119,270 @@ def resize_safe(
 
     return res
 
-class MarkerRefineDataset(torch.utils.data.Dataset):
+class MarkerRefineDataPoint(CSImage):
+
+  def __init__(self, dataset, idx):
+
+    CSImage.__init__(
+      self,
+      dataset.dataset_path, 
+      dataset.image_names[idx % len(dataset.image_names)]
+    )
+
+  def get_instance(self, instance_id):
+
+    return CSInstance(self, instance_id)
+
+class CSInstance:
+
+  __polygons = None
+  __mask = None
+
+  def __init__(self, csimg : CSImage, instance_id : int):
+
+    self.instance_id = instance_id
+    self.csimg = csimg
+
+  def mask(self):
+
+    if self.__mask == None:
+
+      self.__mask = self.csimg.instance_mask(self.instance_id)
+
+    return self.__mask[2]
+
+  def bounds(self):
+
+    self.mask()
+
+    p0,p1 = self.__mask[0:2] # type: ignore
+    
+    return np.index_exp[p0[0]:p1[0],p0[1]:p1[1]]
+
+  def polygons(self):
+
+    if self.__polygons == None:
+
+      self.__polygons = [
+        CSPolygon(self, points) for 
+        points in mask_to_polygons(self.mask())
+      ]
+
+    return self.__polygons
+  
+  def get_label(self):
+
+    '''
+    Returns label
+    '''
+
+    label_id = self.csimg.instance_id_to_label_id(self.instance_id)  # type: ignore
+    label = id2label[label_id]
+
+    return label
+
+  def is_valid(self):
+
+    return (not self.get_label().category in IGNORE_LABELS) and (
+      np.any([p.is_valid() for p in self.polygons()])
+    )
+
+class CSPolygon:
+
+  __bounds = None
 
   def __init__(
     self,
-    dataset_path : str,
-    mode : str = 'train',
-    max_blur = 0.0,
-    gt_blur = 0.0,
-    gt_blur_mix = 0.0,
-    fixed_shape = None,
-    # set to true to return polygon as gt instead of image
-    return_polygon = False,
-    polygon_length = 100,
-    # relationship between infill and border intensity of gt image
-    gt_fill_amount = 0.5,
-    # width of the polygon border in gt image
-    gt_line_width = 0.05
+    csinstance : CSInstance,
+    points
   ):
 
-    self.gt_line_width = gt_line_width
+    self.points = points
+    self.csinstance = csinstance
 
-    self.gt_fill_amount = gt_fill_amount
-
-    self.dataset_path = dataset_path
-
-    self.image_names = get_image_names(dataset_path, mode)
-
-    self.max_blur = max_blur
-
-    self.gt_blur = gt_blur
-
-    self.gt_blur_mix = gt_blur_mix
-
-    self.fixed_shape = fixed_shape
-
-    self.return_polygon = return_polygon
-    self.polygon_length = polygon_length
-
-    self.default_value = self.build_default_value(
-      fixed_shape if not fixed_shape == None else (10,10)
-    )
-
-    if not fixed_shape == None and return_polygon:
-
-      raise Exception('Cannot use fixed shapes when returning polygons.')
-
-  def build_default_value(self, shape):
-
-    return (
-        np.zeros(
-        (4, *shape)
-      ),
-      np.zeros(
-        (self.polygon_length, 2)
-      ) if self.return_polygon else \
-      np.zeros(
-        (1, *shape)
-      )
-    )
-  
-  def __len__(self):
-
-    # I think Dataset and DataLoader do not allow datasets of unknown sizes...
-    # some super huge number will do as % is used in __getitem__
-    return len(self.image_names) * 20
-
-  def __getitem__(self, _ : int):
-
-    '''
-    Returns image, marker, mask
-    '''
-
-    idx = int(np.random.rand() * len(self))
-
-    csimg = CSImage(self.dataset_path, self.image_names[idx % len(self.image_names)])
-
-    #
-    # find a valid instance 
-    #
-
-    instance_ids = csimg.instance_ids()
-      
-    instance_id = instance_ids[idx % len(instance_ids)]
-
-    label_id = csimg.instance_id_to_label_id(instance_id)  # type: ignore
-    label = id2label[label_id]
-
-    if label.category in IGNORE_LABELS:
-
-      return self.default_value
-      
-    p0,p1,label_mask = csimg.instance_mask(instance_id)
- 
-    #
-    # from the instance, pick a random polygon 
-    # as instances may be comprised of multiple polygons (no idea what the authors idea of an "instance" is)
-    #
-
-    polygons = mask_to_polygons(label_mask)
-
-    polygon = polygons[idx % len(polygons)]
- 
-    x,y = np.transpose(polygon)
-
-    polygon = PathInterp(x, y)(np.linspace(0, 1, self.polygon_length))
-    
-    x,y = np.transpose(polygon)
-
+    x,y = np.transpose(self.points)
     # no idea why that is required sometimes
     x = np.array(x)
     y = np.array(y)
 
-    x = x.flatten()
-    y = y.flatten()
+    self.x = x.flatten()
+    self.y = y.flatten()
 
-    # width, height of the polygons bounding box
-    pw, ph = np.max(x) - np.min(x), np.max(y) - np.min(y)
+
+  def dims(self):
+
+    '''
+    Returns w,h of bounding box
+    '''
+    x0, x1, y0, y1 = self.bounds()
+
+
+    return abs(x1 - x0), abs(y1 - y0) 
+
+  def bounds(self):
+
+    if self.__bounds == None:
+      x,y = self.x,self.y
+
+      x0 = np.min(x)
+      x1 = np.max(x)
+      y0 = np.min(y)
+      y1 = np.max(y)
+
+      self.__bounds = x0,x1,y0,y1
+
+    return self.__bounds
+
+
+  def is_valid(self):
+
+    pw,ph = self.dims()
 
     area = pw*ph
 
-    img_area = csimg.img().width * csimg.img().height
+    img_area = self.csinstance.csimg.img().width * self.csinstance.csimg.img().height
 
-    if (
+    return not (
       area < MIN_INSTANCE_AREA_PX or
       area/img_area > MAX_INSTANCE_AREA_RATIO or
       # TODO: if this happens, just pad the image!
       pw < MIN_INSTANCE_WIDTH_PX or
       ph < MIN_INSTANCE_HEIGHT_PX
-    ):
-      return self.default_value
-
-    (mx, my), marker = draw_marker_from_polygon(x, y, CROP_PADDING*max(pw, ph))
-
-    box = (mx, my, mx + marker.shape[1], my + marker.shape[0])
-
-    instance_map = np.array(csimg.instance_id_map()) == instance_id
-    
-    marked_img = np.zeros(
-      (4, marker.shape[0], marker.shape[1])
     )
 
-    img_cropped = np.array(csimg.img().crop(box))
+  def random_marker(self):
+
+    x0,x1,y0,y1 = self.bounds()
+
+    # scale in order to normalize things to the size of the polygon
+    scale = min((x1 - x0), (y1 - y0))
+
+    brush_size = math.floor(scale / np.random.uniform(1, 4))
+
+    return simulate_marker(
+      self.x, 
+      self.y,
+      100,
+      brush_size,
+      np.random.uniform(0.001, 0.005)*scale,
+      np.random.uniform(0.05, 0.2)*scale,
+      np.random.uniform(0, 2*np.pi),
+      low_pass_factor=np.random.uniform(10, 100)
+    )
+
+  def bounding_box(self, padx, pady):
+
+    x0,x1,y0,y1 = self.bounds()
+
+    return (
+      int(x0 - padx/2),
+      int(y0 - pady/2),
+      int(x1 + padx/2),
+      int(y1 + pady/2),
+    )
+
+  def cropped_img(self, padx, pady):
+
+    return self.csinstance.csimg.img().crop(self.bounding_box(padx, pady))
+
+  def cropped_img_extent(self, padx, pady):
+
+    l,t,r,b = self.bounding_box(padx, pady)
+
+    return (l,r,b,t)
+
+class InstanceDataset:
+
+  def __init__(
+    self,
+    dataset_path : str,
+    mode : str = 'train'
+  ):
+
+    self.dataset_path = dataset_path
+
+    self.image_names = get_image_names(dataset_path, mode)
+  
+  def __iter__(self):
+
+    self.idx_img = 0
+    self.idx_inst = 0
+
+    self.curr_img = None
+    self.curr_instances = []
+
+    return self
+
+  def __next__(self):
+
+    if self.idx_img >= len(self.image_names):
+
+      raise StopIteration()
+
+    while self.curr_img == None:
+
+      dp = MarkerRefineDataPoint(self, self.idx_img)
+
+      instances = [CSInstance(dp, iid) for iid in dp.instance_ids()]
+      instances = [inst for inst in instances if inst.is_valid()]
+
+      if len(instances) > 0:
+
+        self.idx_inst = 0
+        self.curr_img = dp
+        self.curr_instances = instances
+
+
+    if self.idx_inst < len(self.curr_instances):
+      inst = self.curr_instances[self.idx_inst]
+
+      self.idx_inst += 1
+
+      return inst
+
+    else:
+      self.idx_inst = 0
+      self.idx_img += 1
+      self.curr_img = None
+
+      return self.__next__()
+
+class PolygonDataset(InstanceDataset):
+
+  def __iter__(self):
+
+    super().__iter__()
     
-    marked_img[0,:,:] = img_cropped[:,:,0]
-    marked_img[1,:,:] = img_cropped[:,:,1]
-    marked_img[2,:,:] = img_cropped[:,:,2]
+    self.curr_inst = None
+    self.curr_polygons = []
 
-    scale = np.min(marker.shape)
+    self.idx_polygon = 0
 
-    marked_img[3,:,:] = filters.gaussian(marker, scale*np.random.uniform(0, self.max_blur)) 
+    return self
 
-    if self.return_polygon:
+  def __next__(self):
 
-      # move origin to box corner
-      gt = polygon - np.array((mx, my))
+    if self.curr_inst == None:
 
-      # normalize coordinates between 0 and 1
-      gt[:,0] /= marker.shape[1]
-      gt[:,1] /= marker.shape[0]
-
-    else: 
-      fa = self.gt_fill_amount
-
-      gt_full = (1-fa)*np.array(
-        draw_polygon(
-          polygon, 
-          instance_map.shape, 
-          int(self.gt_line_width*scale)
-        )
-      )
-      gt_full += fa*polygon_to_mask(polygon, instance_map.shape)
-
-      gt = np.array(Image.fromarray(gt_full).crop(box), dtype=float)
-
-      gt = self.gt_blur_mix * filters.gaussian(gt, self.gt_blur*scale) + \
-      (1 - self.gt_blur_mix) * gt
+      self.curr_inst = super().__next__()
     
-      gt = gt.reshape((1, *gt.shape))
-    
-    if self.fixed_shape == None:
+      self.curr_polygons = [p for p in self.curr_inst.polygons() if p.is_valid()]
+      self.idx_polygon = 0
 
-      return marked_img, gt
+
+    if self.idx_polygon < len(self.curr_polygons):
+
+      polygon = self.curr_polygons[self.idx_polygon]
+
+      self.idx_polygon += 1
+
+      return polygon
 
     else:
 
-      return resize_safe(marked_img, self.fixed_shape), \
-        resize_safe(gt, self.fixed_shape)
+      self.curr_inst = None
 
-
-def split_marked_image(inp):
-
-  img = np.zeros((*inp.shape[2:4], 3))
-
-  img[:,:,0] = inp[0, 0, :, :]
-  img[:,:,1] = inp[0, 1, :, :]
-  img[:,:,2] = inp[0, 2, :, :]
-  img /= np.max(img)
-
-  marker = inp[0,3,:,:]
-  marker /= np.max(marker)
-
-  return img, marker
+      return self.__next__()
 
 
 if __name__ == '__main__':
@@ -366,41 +393,28 @@ if __name__ == '__main__':
 
   load_dotenv()
 
-  dataset = MarkerRefineDataset(
+  dataset = PolygonDataset(
     os.environ['CITYSCAPES_LOCATION'],
-    max_blur=0.05,
-    gt_blur=0.05,
-    gt_blur_mix=0.9,
-    gt_fill_amount=0.2
-    #fixed_shape=(500, 500),
-    #return_polygon=True
   )
 
-  for v in dataset:
-
-    marked_img, gt = v
-  
-    img = np.zeros((*marked_img.shape[1:3], 3))
-    img[:,:,0] = marked_img[0,:,:]
-    img[:,:,1] = marked_img[1,:,:]
-    img[:,:,2] = marked_img[2,:,:]
+  for polygon in dataset:
 
     plt.subplot(1,3,1)
 
-    plt.imshow(img/np.max(img))
-    
-    if dataset.return_polygon:    
-      x,y = np.transpose(gt)
-      plt.plot(x*img.shape[1], y*img.shape[0])
-    
+    bounds = polygon.csinstance.bounds()
+    cropped_img = np.array(polygon.csinstance.csimg.img())[bounds]
+
+    plt.imshow(cropped_img)
+
     plt.subplot(1,3,2)
 
-    plt.imshow(marked_img[3]/np.max(marked_img[3]))
+    w,h = polygon.dims()
 
-    plt.subplot(1,3,3)
-
-    if not dataset.return_polygon:
-
-      plt.imshow(gt[0])
+    plt.imshow(
+      polygon.cropped_img(CROP_PADDING*w, CROP_PADDING*h),
+      extent=polygon.cropped_img_extent(CROP_PADDING*w, CROP_PADDING*h)
+    )
+    
+    plt.plot(polygon.x, polygon.y)
 
     plt.show()
