@@ -95,3 +95,23 @@ def order_polygon(
 ):
 
   return p1[calc_polygon_order(p1, p2)]
+
+def rasterize_line(
+  points,
+  shape
+):
+
+  '''
+  Rasterize a line and return all points in the raster that are on the line.
+  '''
+
+  line = Image.fromarray(np.zeros(shape, dtype=bool))
+
+  draw_single_line(
+    ImageDraw.Draw(line),
+    0, 0,
+    1,
+    points
+  )
+
+  return np.transpose(np.array(line).nonzero())

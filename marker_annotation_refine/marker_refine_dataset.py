@@ -270,7 +270,19 @@ class CSPolygon:
       low_pass_factor=np.random.uniform(10, 100)
     )
 
-  def bounding_box(self, padx, pady):
+  def bounding_box(self, padx=None, pady=None):
+
+    '''
+    Returns x0,y0,x1,y1 of padded bounding box.
+    '''
+
+    w,h = self.dims()
+
+    if padx == None:
+      padx = CROP_PADDING*w
+
+    if pady == None:
+      pady = CROP_PADDING*h
 
     x0,x1,y0,y1 = self.bounds()
 
@@ -281,11 +293,11 @@ class CSPolygon:
       int(y1 + pady/2),
     )
 
-  def cropped_img(self, padx, pady):
+  def cropped_img(self, padx=None, pady=None):
 
     return self.csinstance.csimg.img().crop(self.bounding_box(padx, pady))
 
-  def cropped_img_extent(self, padx, pady):
+  def cropped_img_extent(self, padx=None, pady=None):
 
     l,t,r,b = self.bounding_box(padx, pady)
 
@@ -414,7 +426,7 @@ if __name__ == '__main__':
       polygon.cropped_img(CROP_PADDING*w, CROP_PADDING*h),
       extent=polygon.cropped_img_extent(CROP_PADDING*w, CROP_PADDING*h)
     )
-    
+
     plt.plot(polygon.x, polygon.y)
 
     plt.show()
