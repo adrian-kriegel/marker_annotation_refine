@@ -3,16 +3,13 @@ import os
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
 from torchvision import transforms
 
 
 from marker_annotation_refine.geometry_util import order_polygon
-
+from marker_annotation_refine.iterator_batcher import IteratorBatcher
 from marker_annotation_refine.pyramid_pooling import PyramidPooling
-
-from marker_annotation_refine.marker_refine_dataset import \
-  MarkerRefineDataset
+from marker_annotation_refine.vector_fields import VectorFieldDataset
 
 class Encoder(nn.Module):
     
@@ -20,14 +17,13 @@ class Encoder(nn.Module):
     super().__init__()
     
     self.encoder_cnn = nn.Sequential(
-      nn.Conv2d(4, 8, 4, stride=2, padding=1),
+      nn.Conv2d(5, 10, 4, stride=2, padding=1),
       nn.ReLU(True),
-      nn.Conv2d(8, 16, 3, stride=2, padding=1),
+      nn.Conv2d(10, 16, 3, stride=2, padding=1),
       nn.BatchNorm2d(16),
       nn.ReLU(True),
       nn.Conv2d(16, 32, 3, stride=2, padding=0),
-      nn.ReLU(True),
-      
+      nn.ReLU(True), 
     )
     
         
@@ -73,59 +69,16 @@ class Decoder(nn.Module):
  
     return x
 
-class PolygonDecoder(nn.Module):
-
-  def __init__(
-    self,
-    num_points = 100,
-    # last conv layer size
-    filter_size = 32
-  ):
-
-    super().__init__()
-
-    pyramid = PyramidPooling([5])
-
-    pyramid_output_size = pyramid.get_output_size(filter_size)
-
-    self.num_points = num_points
-
-    n = num_points*2
-    
-    self.decoder_pyramid = nn.Sequential(
-      pyramid,
-      nn.ReLU(True),
-      
-      nn.Linear(pyramid_output_size,  int(0.5 * pyramid_output_size + 0.5*n)),
-      
-      nn.ReLU(True),
-      nn.Linear(int(0.5 * pyramid_output_size + 0.5*n), n)
-    )
-
-    self.filter_size = filter_size
-
-  def forward(self, x):
-
-    x = self.decoder_pyramid(x)
-
-    x = torch.sigmoid(x)
-
-    # shape = (batch, 2*num_points) -> (batch, num_points, 2)
-    x = x.reshape((x.shape[0], self.num_points, 2))
-    
-    return x
-
 def train(
   encoder, decoder,
-  train_dataset : MarkerRefineDataset,
+  train_dataset : VectorFieldDataset,
   out_dir : str,
   nepochs = 400,
   batch_size = 64,
   report_interval = 100
 ):
 
-
-  loss_fn =  nn.MSELoss() if train_dataset.return_polygon else nn.BCELoss()
+  loss_fn =  nn.BCELoss()
   
   optimizer = torch.optim.Adam(
     [
@@ -143,40 +96,30 @@ def train(
   encoder.train()
   decoder.train()
 
-  train_loader = DataLoader(train_dataset, batch_size=batch_size)
+  loader = IteratorBatcher(train_dataset, batch_size)
 
   for epoch in range(1, nepochs+1):
     i = 0
     # loss sum for reporting interval
     loss_sum = 0
-    for marked_img, gt in train_loader:
+    for marked_img, gt in train_dataset:
 
-      # TODO: use collate_fn to filter out bad data points
-      if train_dataset.return_polygon and (np.sum(gt.numpy()) == 0):
-
-        continue
+      marked_img = marked_img.reshape((1, *marked_img.shape))
+      gt = gt.reshape((1, *marked_img.shape))
 
       optimizer.zero_grad()
       
       output = decoder.forward(encoder.forward(marked_img.float().to(device)))
 
+      print(np.any(np.isnan(marked_img.detach().numpy())))
+      print(np.max(output.detach().cpu().numpy()))
+      
+      
       gt = gt.float().to(device)
       
-      if train_dataset.fixed_shape == None and not train_dataset.return_polygon:
-        gt = transforms.Resize(output.shape[2:4])(gt)
+      gt = transforms.Resize(output.shape[2:4])(gt)
 
-
-      if train_dataset.return_polygon:
-        output_cpu = output.cpu().detach().numpy()
-        gt_cpu = gt.cpu().detach().numpy()
-        # for each batch, adjust the polygon
-        for j in range(len(gt_cpu)):
-
-          gt[j] = order_polygon(gt_cpu[j], output_cpu[j])
-
-        gt = torch.from_numpy(gt).to(device)
-      
-      loss = loss_fn(output, gt)
+      loss = loss_fn(output, gt.reshape((batch_size, 1, *gt.shape[1:3])))
 
       loss.backward()
       optimizer.step()
@@ -189,29 +132,6 @@ def train(
         print(f'{epoch}: {loss_sum/report_interval}')
         loss_sum = 0
 
-        torch.save(encoder.state_dict(), os.path.join(out_dir, 'marker_refine_encoder.pt'))
-        torch.save(decoder.state_dict(), os.path.join(out_dir, 'marker_refine_decoder.pt'))
+        torch.save(encoder.state_dict(), os.path.join(out_dir, 'encoder.pt'))
+        torch.save(decoder.state_dict(), os.path.join(out_dir, 'decoder.pt'))
 
-
-if __name__ == '__main__':
-
-  from dotenv import load_dotenv
-
-  load_dotenv()
-
-  train_dataset = MarkerRefineDataset(
-    os.environ['CITYSCAPES_LOCATION'],
-    'train',
-    fixed_shape=(508,508)
-  )
-
-  encoder = Encoder()
-  decoder = Decoder()
-
-  train(
-    encoder,
-    decoder,
-    train_dataset,
-    './models/',
-    batch_size=12
-  )

@@ -11,6 +11,7 @@ import matplotlib
 from cityscapesscripts.helpers.labels import id2label
 
 from skimage import transform
+from PIL import Image, ImageDraw
 
 from marker_annotation_refine.cityscapes_helpers import CSImage
 from marker_annotation_refine.path_interp import PathInterp
@@ -257,15 +258,15 @@ class CSPolygon:
     # scale in order to normalize things to the size of the polygon
     scale = min((x1 - x0), (y1 - y0))
 
-    brush_size = math.floor(scale / np.random.uniform(1, 4))
+    brush_size = math.floor(scale / np.random.uniform(2, 4))
 
     return simulate_marker(
       self.x, 
       self.y,
       100,
       brush_size,
-      np.random.uniform(0.001, 0.005)*scale,
-      np.random.uniform(0.05, 0.2)*scale,
+      np.random.uniform(0.001, 0.002)*scale,
+      np.random.uniform(0.05, 0.1)*scale,
       np.random.uniform(0, 2*np.pi),
       low_pass_factor=np.random.uniform(10, 100)
     )
@@ -302,6 +303,22 @@ class CSPolygon:
     l,t,r,b = self.bounding_box(padx, pady)
 
     return (l,r,b,t)
+
+  def draw_outline(self, padx=None, pady=None):
+
+    x0,y0,x1,y1 = self.bounding_box(padx, pady)
+
+    img = Image.fromarray(np.zeros((y1 - y0, x1 - x0), dtype=float))
+
+    draw_single_line(
+      ImageDraw.Draw(img),
+      x0, y0,
+      1,
+      self.points,
+      1
+    )
+
+    return np.array(img)
 
 class InstanceDataset:
 
@@ -357,7 +374,7 @@ class InstanceDataset:
       self.idx_img += 1
       self.curr_img = None
 
-      return self.__next__()
+      return InstanceDataset.__next__(self)
 
 class PolygonDataset(InstanceDataset):
 
@@ -394,7 +411,7 @@ class PolygonDataset(InstanceDataset):
 
       self.curr_inst = None
 
-      return self.__next__()
+      return PolygonDataset.__next__(self)
 
 
 if __name__ == '__main__':
