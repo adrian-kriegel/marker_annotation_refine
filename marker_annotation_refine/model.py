@@ -102,18 +102,14 @@ def train(
     i = 0
     # loss sum for reporting interval
     loss_sum = 0
-    for marked_img, gt in train_dataset:
+    for marked_img, gt in loader:
 
-      marked_img = marked_img.reshape((1, *marked_img.shape))
-      gt = gt.reshape((1, *marked_img.shape))
+      #marked_img = torch.from_numpy(marked_img.reshape((1, *marked_img.shape)))
+      #gt = torch.from_numpy(gt.reshape((1, *gt.shape)))
 
       optimizer.zero_grad()
       
       output = decoder.forward(encoder.forward(marked_img.float().to(device)))
-
-      print(np.any(np.isnan(marked_img.detach().numpy())))
-      print(np.max(output.detach().cpu().numpy()))
-      
       
       gt = gt.float().to(device)
       

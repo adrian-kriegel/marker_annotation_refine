@@ -35,7 +35,7 @@ train(
   encoder,
   decoder,
   train_dataset,
-  './models/',
+  './models_vec/',
   batch_size=1,
   report_interval=1
 )

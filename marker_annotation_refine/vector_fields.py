@@ -1,4 +1,5 @@
 
+from cmath import isnan
 import math
 import os
 import typing
@@ -66,7 +67,6 @@ def marker_to_vector_field(
       # % all angles because angles offset by 180° should be treated the same
       phi[i,j] = (math.atan2(v[1], v[0]) + np.pi/2) % np.pi - np.pi/2
 
-  
 
   for (i,j) in line:
     # TODO: handle overflow
@@ -80,9 +80,10 @@ def marker_to_vector_field(
       k < shape[0]
     ]
 
-    phi[i,j] = np.mean(phi[idx])
-    amp[i,j] = np.mean(amp[idx])
-
+    if len(idx) > 0:
+      
+      phi[i,j] = np.mean(phi[idx])
+      amp[i,j] = np.mean(amp[idx])
 
   return to_uv(phi, amp)
 
@@ -189,7 +190,6 @@ class VectorFieldDataset(PolygonDataset):
       lambda d: (1.0  + gaussian((d-r)/scale,0.04)) * 0.5,
     )
 
-
     #
     # load data into a torch tensor
     #
@@ -206,8 +206,6 @@ class VectorFieldDataset(PolygonDataset):
     # marker vector field channels
     marked_img[3,:,:] = dx
     marked_img[4,:,:,] = dy
-
-
 
     return marked_img, polygon.draw_outline()
 
