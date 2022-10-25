@@ -296,6 +296,7 @@ if __name__ == '__main__':
 
     # mask = np.min((edges, amp), axis=0)
 
+    # hamacher product
     # mask = edges*amp / (edges + amp - edges*amp)
 
     mask = camp
