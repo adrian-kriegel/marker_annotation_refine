@@ -125,7 +125,7 @@ def hed(img : np.ndarray):
   tenInput = torch.FloatTensor(
     numpy.ascontiguousarray(
       numpy.array(
-        img[:, :, ::-1].transpose(2, 0, 1).astype(numpy.float32) * (1.0 / 255.0)
+        img[:, :, ::-1].transpose(2, 0, 1).astype(numpy.float32)
       )
     )
   )

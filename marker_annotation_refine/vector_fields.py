@@ -210,6 +210,46 @@ class VectorFieldDataset(PolygonDataset):
 
     return marked_img, polygon.draw_outline()
 
+def follow_field(
+  field : tuple[np.ndarray, np.ndarray],
+  start : tuple[int, int],
+  thrs = 0.5,
+  max_len=200
+):
+
+  dx, dy = field
+
+  current_pos = start
+
+  path = []
+
+  for i in range(max_len):
+
+    i,j = current_pos
+
+    if (
+      i < 0 or j < 0 or
+      i >= dx.shape[0] or 
+      j >= dx.shape[1]
+    ):
+      break
+
+    val = (dx[i,j], dy[i,j])
+
+    if np.linalg.norm(val) < thrs:
+      break
+      
+
+    path.append(current_pos)
+    
+    a = max(val[0], val[1])
+
+    current_pos = (i - int(val[1]/a), j + int(val[0]/a))
+
+
+  return path
+
+
 if __name__ == '__main__':
 
   load_dotenv()
@@ -219,7 +259,10 @@ if __name__ == '__main__':
     'train',
   )
 
-  for marked_img,field in ds:
+  for i,(marked_img,field) in enumerate(ds):
+
+    if i < 1:
+      continue
 
     img = np.moveaxis(marked_img, 0, 2)
 
@@ -230,19 +273,33 @@ if __name__ == '__main__':
 
     amp = np.linalg.norm((dx, dy), axis=0)
 
-    edges = hed(camera_img * 255.0)
+    edges = hed(camera_img)
     edx, edy = np.gradient(edges)
 
-    plt.subplot(1,2,1)
+    cdx, cdy = dx*(1.0*edges), dy * (1.0*edges)
+
+    cphi,camp = to_polar(cdx, cdy)
+    
+    plt.subplot(1,3,1)
 
     plt.imshow(camera_img)
 
     plt.quiver(dx, dy)
 
-    plt.subplot(1,2,2)
+    plt.subplot(1,3,2)
 
     plt.imshow(camera_img)
 
-    plt.quiver(dx*(1.0*edges), dy * (1.0*edges))
+    plt.quiver(cdx, cdy)
+
+    plt.subplot(1,3,3)
+
+    # mask = np.min((edges, amp), axis=0)
+
+    # mask = edges*amp / (edges + amp - edges*amp)
+
+    mask = camp
+
+    plt.imshow(mask)
 
     plt.show()
