@@ -12,6 +12,7 @@ from skimage.color import rgb2hsv
 import torch
 
 from marker_annotation_refine.geometry_util import Polygon, rasterize_line
+from marker_annotation_refine.hed import hed
 
 from marker_annotation_refine.marker_annotation import MarkerLine, draw_single_line
 
@@ -154,31 +155,6 @@ def gaussian(x, sigma):
 
   return np.exp(-np.power(x/sigma, 2.)/2.)
 
-def polygon_to_vector_field(
-  points,
-  out_dx,
-  out_dy
-):
-
-  px,py = np.transpose(points)
-  line = np.array(np.transpose((py, px)), dtype=int)#rasterize_line(points, out_dx.shape)
-  
-  j,k = line[0]
-
-  diff = np.array(line[1]) - line[0]
-  
-  out_dx[j,k] = diff[0]
-  out_dy[j,k] = diff[1]
-  
-  for i in range(1, len(line)):
-
-    j,k = line[i]
-    
-    diff = np.array(line[i - 1]) - line[i]
-    
-    out_dx[j,k] = diff[0]
-    out_dy[j,k] = diff[1]
-
 
 class VectorFieldDataset(PolygonDataset):
 
@@ -232,15 +208,7 @@ class VectorFieldDataset(PolygonDataset):
     marked_img[3,:,:] = dx
     marked_img[4,:,:,] = dy
 
-    polygon_field = np.zeros((2, *img.shape[0:2]))
-
-    polygon_to_vector_field(
-      polygon.points - (x0, y0),
-      polygon_field[0,:,:],
-      polygon_field[1,:,:]
-    )
-
-    return marked_img, polygon_field
+    return marked_img, polygon.draw_outline()
 
 if __name__ == '__main__':
 
@@ -255,18 +223,26 @@ if __name__ == '__main__':
 
     img = np.moveaxis(marked_img, 0, 2)
 
+    camera_img = img[:,:,0:3]/np.max(img[:,:,0:3])
+
     dx = marked_img[3,:,:]
     dy = marked_img[4,:,:]
 
+    amp = np.linalg.norm((dx, dy), axis=0)
+
+    edges = hed(camera_img * 255.0)
+    edx, edy = np.gradient(edges)
+
     plt.subplot(1,2,1)
 
-    plt.imshow(img[:,:,0:3]/np.max(img[:,:,0:3]))
+    plt.imshow(camera_img)
 
     plt.quiver(dx, dy)
 
     plt.subplot(1,2,2)
 
-    plt.imshow(img[:,:,0:3]/np.max(img[:,:,0:3]))
-    plt.quiver(field[0], field[1])
+    plt.imshow(camera_img)
+
+    plt.quiver(dx*(1.0*edges), dy * (1.0*edges))
 
     plt.show()
