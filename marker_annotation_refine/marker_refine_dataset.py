@@ -237,6 +237,9 @@ class CSPolygon:
 
   def is_valid(self):
 
+    if len(self.points) < 3:
+      return False
+
     pw,ph = self.dims()
 
     area = pw*ph
