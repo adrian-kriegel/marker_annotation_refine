@@ -11,8 +11,8 @@ from skimage import filters
 from skimage.color import rgb2hsv
 import torch
 
-from marker_annotation_refine.geometry_util import Polygon, rasterize_line
-from marker_annotation_refine.hed import hed
+from marker_annotation_refine.geometry_util import rasterize_line
+from marker_annotation_refine.edge_detection import hed
 
 from marker_annotation_refine.marker_annotation import MarkerLine, draw_single_line
 
@@ -297,9 +297,9 @@ if __name__ == '__main__':
     # mask = np.min((edges, amp), axis=0)
 
     # hamacher product
-    # mask = edges*amp / (edges + amp - edges*amp)
+    mask = edges*amp / (edges + amp - edges*amp)
 
-    mask = camp
+    # mask = camp
 
     plt.imshow(mask)
 

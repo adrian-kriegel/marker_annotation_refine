@@ -18,7 +18,10 @@ class PathInterp:
 
       self.lengths[i] = self.lengths[i -1]  + np.linalg.norm(self.edges[i] - self.edges[i + 1])
 
-    self.lengths /= self.lengths[-1]
+
+    self.path_len = self.lengths[-1]
+
+    self.lengths /= self.path_len
 
   def __call__(self, base : np.ndarray):
 

@@ -5,6 +5,9 @@ from typing_extensions import TypedDict
 import typing
 from PIL import Image, ImageDraw
 import numpy as np
+from scipy import interpolate
+from shapely.geometry import LineString
+from marker_annotation_refine.alpha_shape import alpha_shape, edges_to_indices
 
 Point = typing.Tuple[int, int]
 
@@ -159,3 +162,8 @@ def draw_marker(
       res -= np.array(img) 
 
   return (x,y), res/np.max(res)
+
+
+def grow_line(marker : MarkerLine):
+
+  return LineString(marker['points']).buffer(marker['brushSize'] / 2)

@@ -7,6 +7,7 @@ import numpy
 import torch
 import torch.backends.cudnn
 import numpy as np
+from skimage.transform import resize
 
 from marker_annotation_refine.marker_refine_dataset import \
   PolygonDataset
@@ -178,3 +179,9 @@ if __name__ == '__main__':
 
     plt.show()
 # end
+
+def edge_detect(img):
+
+  inp = np.array(resize(img * 255, (320, 480)))
+
+  return hed(inp)

@@ -49,7 +49,6 @@ def low_pass(data, f):
 
 def simulate_marker(
   ex, ey, # edges
-  interp_num : int,
   brush_size : int,
   jitter_freq : float,
   jitter_amp : int,
@@ -62,7 +61,11 @@ def simulate_marker(
   '''
 
   # interpolate the polygon
-  points = low_pass(PathInterp(ex, ey)(np.linspace(0, 1, interp_num)), f=1 - 1/interp_num * low_pass_factor)
+  interp = PathInterp(ex, ey)
+
+  interp_num = math.ceil(interp.path_len / brush_size * 6)
+  
+  points = low_pass(interp(np.linspace(0, 1, interp_num)), f=1 - 1/interp_num * low_pass_factor)
 
   center = np.mean(points, axis=0)
 
@@ -266,7 +269,6 @@ class CSPolygon:
     return simulate_marker(
       self.x, 
       self.y,
-      100,
       brush_size,
       np.random.uniform(0.001, 0.002)*scale,
       np.random.uniform(0.05, 0.1)*scale,
