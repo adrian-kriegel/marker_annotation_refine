@@ -8,7 +8,7 @@ import numpy as np
 from marker_annotation_refine.alpha_shape import alpha_shape, edges_to_indices
 from marker_annotation_refine.edge_detection import edge_detect
 
-from shapely.geometry import Polygon
+from skimage.transform import resize
 
 from marker_annotation_refine.marker_annotation import \
   MarkerLine, grow_line
@@ -177,11 +177,25 @@ if __name__ == '__main__':
       )
     ).transpose()
 
+    cost = np.concatenate(cost)
+    cost -= np.min(cost)
+    cost /= np.max(cost)
+
+    colors = [
+      (c, 1, 1) for c in cost
+    ]
+
     # mx,my = marker_polygon.exterior.coords.xy
+
+    plt.subplot(1,2,1)
 
     plt.imshow(img)
 
-    plt.scatter(mx, my, s=0.2)
+    plt.scatter(mx, my, s=0.2, c=colors)
+
+    plt.subplot(1,2,2)
+
+    plt.imshow(resize(edges, img.shape[0:2]))
 
     plt.show()
 

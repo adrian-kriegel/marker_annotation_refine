@@ -8,6 +8,7 @@ import torch
 import torch.backends.cudnn
 import numpy as np
 from skimage.transform import resize
+import numpy as np
 
 from marker_annotation_refine.marker_refine_dataset import \
   PolygonDataset
@@ -144,16 +145,21 @@ def hed(img : np.ndarray):
 
   output = netNetwork(tenInput.view(1, 3, intHeight, intWidth))[0, :, :, :].cpu()
 
-  return output.clip(0.0, 1.0).numpy().transpose(1, 2, 0)[:, :, 0]
+  return output.numpy().transpose(1, 2, 0)[:, :, 0]
 # end
 
 ##########################################################
 
+
+def edge_detect(img):
+
+  inp = resize(np.array(img, dtype=np.float32) / 255.0, (320, 480))
+
+  return hed(inp)
+
 if __name__ == '__main__':
 
   import matplotlib.pyplot as plt
-  import numpy as np
-  from PIL import Image
 
   load_dotenv()
 
@@ -166,22 +172,16 @@ if __name__ == '__main__':
     img = np.array(polygon.cropped_img())
 
 
-    outimg = hed(img)
+    outimg = edge_detect(img)
 
     plt.subplot(2,1,1)
     plt.imshow(img)
 
     plt.subplot(2,1,2)
 
-    dx,dy = np.gradient(np.array(outimg))
+    # dx,dy = np.gradient(np.array(outimg))
 
-    plt.imshow(outimg)
+    plt.imshow(resize(outimg, img.shape[0:2]))
 
     plt.show()
 # end
-
-def edge_detect(img):
-
-  inp = np.array(resize(img * 255, (320, 480)))
-
-  return hed(inp)
