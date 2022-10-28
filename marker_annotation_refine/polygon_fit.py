@@ -5,8 +5,8 @@
 import math
 from typing import Callable
 import numpy as np
-from marker_annotation_refine.alpha_shape import alpha_shape, edges_to_indices
 from marker_annotation_refine.edge_detection import edge_detect
+from skimage.color import rgb2gray
 
 from skimage.transform import resize
 
@@ -18,7 +18,7 @@ def fit_polygon(
   marker : MarkerLine,
   bounds : tuple[int, int],
   # (x, y, phi, dist) => cost
-  cost_fnc : Callable[[int, int, float, float], float]
+  cost_fnc : Callable[[int, int, float, float, int, int], float]
 ):
 
   '''
@@ -67,7 +67,7 @@ def fit_polygon(
       # collect the objective values for each pixel on the radial line
       obj = np.array(
         [
-          cost_fnc(j,i, angles[phi_idx], radii[r_idx]) \
+          cost_fnc(j,i, angles[phi_idx], radii[r_idx], y, x) \
           if (
             i >= 0 and j >= 0 and
             i < bounds[0] and 
@@ -155,6 +155,9 @@ if __name__ == '__main__':
 
     img = np.array(polygon.cropped_img())
 
+    # gradient of the image
+    dx,dy = np.gradient(rgb2gray(img))
+
     edges = edge_detect(img)
 
     scale = np.array(edges.shape) / img.shape[0:2]
@@ -164,8 +167,10 @@ if __name__ == '__main__':
     amp, phase, cost = fit_polygon(
       marker,
       img.shape[0:2],
-      # TODO: add perpendicularity to cost function
-      lambda j,i,phi,dist: -edges[int(i*scale[0]),int(j*scale[1])] + 1e-3*(dist - r)**2
+      lambda j,i,phi,dist,rj,ri: \
+        - edges[int(i*scale[0]),int(j*scale[1])] \
+        + 1e-3*(dist - r)**2 \
+        - ((rj-j)*dx[i,j] + (ri-i)*dy[i,j])
     )
 
     mx,my = np.array(

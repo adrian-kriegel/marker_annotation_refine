@@ -9,6 +9,8 @@ import torch.backends.cudnn
 import numpy as np
 from skimage.transform import resize
 import numpy as np
+from skimage.filters import unsharp_mask
+
 
 from marker_annotation_refine.marker_refine_dataset import \
   PolygonDataset
@@ -92,7 +94,7 @@ class Network(torch.nn.Module):
   # end
 
   def forward(self, tenInput):
-    tenInput = tenInput * 255.0
+
     tenInput = tenInput - torch.tensor(data=[104.00698793, 116.66876762, 122.67891434], dtype=tenInput.dtype, device=tenInput.device).view(1, 3, 1, 1)
 
     tenVggOne = self.netVggOne(tenInput)
@@ -150,12 +152,35 @@ def hed(img : np.ndarray):
 
 ##########################################################
 
+def alg_sum(imgs : list[np.ndarray]):
 
-def edge_detect(img):
+  '''
+  Algebraic sum (fuzzy-or).
+  '''
 
-  inp = resize(np.array(img, dtype=np.float32) / 255.0, (320, 480))
+  return np.sum(imgs, axis=0) - np.product(imgs, axis=0)
 
-  return hed(inp)
+def edge_detect(img, original_shape=False):
+
+
+  # upscale the image if it is too small
+  if img.shape[0] < 100 and img.shape[1] < 100:
+
+    inp = resize(np.array(img, dtype=np.float32), (320, 480), anti_aliasing=False)
+  
+  else:
+
+    inp = img
+    
+
+  outimg = hed(inp)
+  outimg_t = hed(inp.transpose((1,0,2))).transpose((1,0))
+
+  res = alg_sum([outimg, outimg_t])
+
+  return resize(res, img.shape[0:2]) if original_shape else res
+
+
 
 if __name__ == '__main__':
 
@@ -171,17 +196,18 @@ if __name__ == '__main__':
 
     img = np.array(polygon.cropped_img())
 
+    outimg = edge_detect(img, True)
 
-    outimg = edge_detect(img)
-
-    plt.subplot(2,1,1)
+    plt.subplot(3,1,1)
+    plt.title('Camera')
     plt.imshow(img)
 
-    plt.subplot(2,1,2)
+    plt.subplot(3,1,2)
 
-    # dx,dy = np.gradient(np.array(outimg))
+    plt.title('HED')
+    plt.imshow(outimg)
 
-    plt.imshow(resize(outimg, img.shape[0:2]))
+    plt.subplot(3,1,3)
 
     plt.show()
 # end
