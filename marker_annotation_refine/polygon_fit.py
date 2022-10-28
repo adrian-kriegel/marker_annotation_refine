@@ -192,15 +192,21 @@ if __name__ == '__main__':
 
     # mx,my = marker_polygon.exterior.coords.xy
 
-    plt.subplot(1,2,1)
+    plt.subplot(2,2,1)
 
     plt.imshow(img)
 
     plt.scatter(mx, my, s=0.2, c=colors)
 
-    plt.subplot(1,2,2)
+    plt.subplot(2,2,2)
 
     plt.imshow(resize(edges, img.shape[0:2]))
+
+    plt.subplot(2,2,3)
+
+    hist, bins = np.histogram(cost, bins=20)
+
+    plt.plot(bins[0:-1], hist)
 
     plt.show()
 
