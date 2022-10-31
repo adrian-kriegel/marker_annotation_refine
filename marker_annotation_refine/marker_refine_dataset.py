@@ -325,7 +325,9 @@ class CSPolygon:
 
     return np.array(img)
 
-class InstanceDataset:
+
+
+class CSDataset:
 
   def __init__(
     self,
@@ -340,12 +342,9 @@ class InstanceDataset:
   def __iter__(self):
 
     self.idx_img = 0
-    self.idx_inst = 0
-
-    self.curr_img = None
-    self.curr_instances = []
 
     return self
+
 
   def __next__(self):
 
@@ -353,9 +352,30 @@ class InstanceDataset:
 
       raise StopIteration()
 
-    while self.curr_img == None:
+    dp = MarkerRefineDataPoint(self, self.idx_img)
 
-      dp = MarkerRefineDataPoint(self, self.idx_img)
+    self.idx_img += 1
+
+    return dp
+
+class InstanceDataset(CSDataset):
+  
+  def __iter__(self):
+
+    CSDataset.__iter__(self)
+
+    self.idx_inst = 0
+
+    self.curr_img = None
+    self.curr_instances = []
+
+    return self
+
+  def __next__(self) -> CSInstance:
+
+    while self.curr_img == None:
+      
+      dp = super().__next__()
 
       instances = [CSInstance(dp, iid) for iid in dp.instance_ids()]
       instances = [inst for inst in instances if inst.is_valid()]
@@ -376,7 +396,6 @@ class InstanceDataset:
 
     else:
       self.idx_inst = 0
-      self.idx_img += 1
       self.curr_img = None
 
       return InstanceDataset.__next__(self)
@@ -385,7 +404,7 @@ class PolygonDataset(InstanceDataset):
 
   def __iter__(self):
 
-    super().__iter__()
+    InstanceDataset.__iter__(self)
     
     self.curr_inst = None
     self.curr_polygons = []
@@ -394,11 +413,11 @@ class PolygonDataset(InstanceDataset):
 
     return self
 
-  def __next__(self):
+  def __next__(self) -> CSPolygon:
 
     if self.curr_inst == None:
 
-      self.curr_inst = super().__next__()
+      self.curr_inst = InstanceDataset.__next__(self)
     
       self.curr_polygons = [p for p in self.curr_inst.polygons() if p.is_valid()]
       self.idx_polygon = 0
@@ -436,6 +455,7 @@ if __name__ == '__main__':
     plt.subplot(1,3,1)
 
     bounds = polygon.csinstance.bounds()
+    
     cropped_img = np.array(polygon.csinstance.csimg.img())[bounds]
 
     plt.imshow(cropped_img)
