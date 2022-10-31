@@ -1,30 +1,12 @@
 
-
-
-import typing
 import numpy as np
 
 from skimage.color import rgb2gray
-from marker_annotation_refine.geometry_util import rasterize_line
+from skimage.filters import gaussian
 
 from marker_annotation_refine.marker_refine_dataset import \
   CSPolygon, \
   PolygonDataset
-
-def draw_polygon_noisy(
-  polygon : CSPolygon,
-  shape : typing.Tuple[int,int]
-):
-
-  img = np.zeros(shape, dtype=np.float32)
-
-  coords = np.transpose(np.nonzero(polygon.draw_outline()))
-
-  for i,j in coords:
-
-    img[i,j] = 1.0
-
-  return img
 
 
 
@@ -33,30 +15,28 @@ class PCNoise:
   def __init__(
     self,
     polygon : CSPolygon,
-    n = 50
   ):
-
-    self.n = n
 
     self.polygon = polygon
 
     img = np.array(polygon.cropped_img())
 
+    self.n = (img.shape[0] * img.shape[1]) // 10
+
     dx,dy = np.gradient(rgb2gray(img))
 
-    amp = np.linalg.norm((dx, dy), axis=0)
+    self.amp = np.linalg.norm((dx, dy), axis=0)
+    self.amp /= np.max(self.amp)
+    self.candidates = np.where(self.amp > 0.02 * np.max(self.amp))
 
-    amp /= np.max(amp)
-
-    self.amp = amp
-
-    self.candidates = np.where(amp > 0.2)
-
-    self.imgpoly = draw_polygon_noisy(polygon, amp.shape)
+    self.imgpoly = polygon.draw_outline()
+    self.imgpoly /= np.max(self.imgpoly)
 
   def __iter__(self):
 
-    self.mask = np.zeros(self.amp.shape[0:2], dtype=bool)
+    self.last_noise = np.zeros(self.imgpoly.shape[0:2], dtype=np.float32)
+
+    self.level = 1
 
     return self
 
@@ -67,9 +47,23 @@ class PCNoise:
     idx_x = self.candidates[0][idx]
     idx_y = self.candidates[1][idx]
 
-    self.mask[idx_x, idx_y] = True
+    mask = np.zeros(self.amp.shape[0:2], dtype=bool)
 
-    return (self.amp * self.mask)
+    mask[idx_x, idx_y] = True
+
+    noise = mask * self.amp
+
+    return noise
+    
+  def mix(self, img, noise):
+
+    self.level += 1
+
+    f = 1.0 / self.level
+    
+    noise_img = (1.0 - f)*self.noise + f * self.imgpoly
+
+    return noise_img / np.max(noise_img)
 
 
 class PCNoiseDataset(PolygonDataset):
@@ -100,13 +94,13 @@ if __name__ == '__main__':
 
   for noiser in ds:
 
-    for i,noise in enumerate(noiser):
+    for i,noisyimg in enumerate(noiser):
 
       if i >= nlevels:
         break
 
       plt.subplot(1, nlevels, i + 1)
 
-      plt.imshow(noiser.imgpoly + noise)
+      plt.imshow(noisyimg)
 
     plt.show()

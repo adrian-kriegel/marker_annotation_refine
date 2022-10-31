@@ -7,7 +7,7 @@ from torchvision import transforms
 
 
 from marker_annotation_refine.geometry_util import order_polygon
-from marker_annotation_refine.iterator_batcher import IteratorBatcher
+from marker_annotation_refine.iterator_utils import IteratorBatcher
 from marker_annotation_refine.pyramid_pooling import PyramidPooling
 from marker_annotation_refine.vector_fields import VectorFieldDataset
 
