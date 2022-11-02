@@ -125,8 +125,8 @@ try:
 except OSError:
   print("Warning, no models found!")
 
-loss_fn =  nn.BCELoss()
-  
+loss_fn =  nn.MSELoss()
+
 optimizer = torch.optim.Adam(
   model.parameters(),
   lr=0.001

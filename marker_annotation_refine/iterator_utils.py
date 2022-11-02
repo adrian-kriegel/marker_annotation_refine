@@ -44,7 +44,8 @@ class IteratorWrap:
 
   def __iter__(self):
 
-    return self.it.__iter__()
+    self.it.__iter__()
+    return self
 
   def __next__(self):
 

@@ -61,13 +61,11 @@ class UNet(nn.Module):
     self.encoder     = Encoder(enc_chs)
     self.decoder     = Decoder(dec_chs)
     self.head        = nn.Conv2d(dec_chs[-1], num_class, 1)
-    self.final       = nn.Sigmoid()
 
   def forward(self, x):
     
     enc_ftrs = self.encoder(x)
     out      = self.decoder(enc_ftrs[::-1][0], enc_ftrs[::-1][1:])
     out      = self.head(out)
-    out      = self.final(out)
 
     return out
