@@ -33,13 +33,55 @@ visualize = False
 
 model_path = 'models/unet_denoise.pt'
 
-max_noise_level = 2
+max_noise_level = 10
 noise_mix = 0.5
-display_level = 1
-report_interval = 1
+display_level = 9
+report_interval = 20
 
 img_to_tensor = transforms.PILToTensor()
 tensor_to_img = transforms.ToPILImage()
+
+def create_input_tensor(
+  img_cam : Image.Image,
+  img_marker : Image.Image,
+  batch_size : int = 1
+):
+
+  '''
+
+  Returns 5 channel image (tensor) with identical data for each batch.
+  Channels:
+    0:3 rgb camera image
+    3   marker intensity
+    4   gt object outline + noise (set to zero by default)
+
+  '''
+
+  w, h = img_cam.width, img_cam.height
+
+  n = batch_size
+
+  # 
+  res = torch.zeros((n, 3 + 1 + 1, h, w))
+
+  # index of the channel containing the marker data
+  ch_marker = 3
+
+  tensor_marker = torch.from_numpy(np.array(img_marker))
+
+  # populate the inputs
+  for i in range(n):
+
+    # camera image
+    res[i, 0:3, :, :] = img_to_tensor(img_cam)
+
+    # marker 
+    res[i, ch_marker, :, :] = tensor_marker
+
+    # noise is left empty and needs to be filled in later
+
+  return res
+
 
 def load_polygon_as_batch(
   p : CSPolygon,
@@ -50,11 +92,7 @@ def load_polygon_as_batch(
   '''
   Loads polygon as train batches of (inputs, outputs) where
 
-  inputs: 5 channel image with channels
-          0:3 rgb camera image
-          3   marker intensity
-          4   gt object outline + noise
-
+  inputs as in create_input_tensor
 
   outputs: 1 channel image of respective noise
   '''
@@ -75,21 +113,11 @@ def load_polygon_as_batch(
 
   # generate the marker intensity image 
 
-  x0,y0,_,_ = p.bounding_box()
-  marker = p.random_marker()
-
-  img_marker = Image.new('F', (w, h), 0)
-  
-  draw_single_line(
-    ImageDraw.Draw(img_marker),
-    x0, y0,
-    marker['brushSize'],
-    marker['points']
+  inputs = create_input_tensor(
+    img_cam,
+    p.draw_random_marker(w, h),
+    n,
   )
-
-  tensor_marker = torch.from_numpy(np.array(img_marker))
-  
-  inputs = torch.zeros((n, 3 + 1 + 1, h, w))
 
   noise = torch.zeros((n, h, w))
 
@@ -100,21 +128,19 @@ def load_polygon_as_batch(
 
     noise[i] = noise[i - 1] + torch.rand((h, w)) * mix
 
-  # populate the inputs
+  # populate the part of the inputs containing the noisy gt images
   for i in range(n):
-
-    # camera image
-    inputs[i, 0:3, :, :] = img_to_tensor(img_cam)
-
-    # marker 
-    inputs[i, ch_marker, :, :] = tensor_marker
 
     # noisy gt
     inputs[i, ch_noisy_gt, :, :] = (1.0 - mix) * img_gt + noise[i]
 
   return inputs, noise.reshape((n, 1, h, w))
 
+# end load_polygon_as_batch
+
 def display_batch(inputs, outputs):
+
+  ''' Display part of noise batch. '''
 
   img = tensor_to_img(inputs[0, 0:3])
 
@@ -147,35 +173,49 @@ def display_batch(inputs, outputs):
 
   plt.show()
 
+# end def display_batch
 
-model = UNet(
-  enc_chs=(5, 64, 128),
-  dec_chs=(128, 64),
-  num_class=1,
-)
+def load_model(
+  model_path='models/unet_denoise.pt',
+  accept_empty=False,
+):
 
-try:
+  model = UNet(
+    enc_chs=(5, 64, 128),
+    dec_chs=(128, 64),
+    num_class=1,
+  )
 
-  model.load_state_dict(torch.load(model_path))
+  try:
 
-except OSError:
-  print("Warning, no models found!")
+    model.load_state_dict(torch.load(model_path))
 
-loss_fn =  nn.MSELoss()
+  except OSError as e:
+    if accept_empty:
+      print("Warning, no models found!")
+    else:
+      raise e
 
-optimizer = torch.optim.Adam(
-  model.parameters(),
-  lr=0.001
-)
+  return model
 
-device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-
-model.to(device)
-model.train()
+# end def load_model
 
 if __name__ == '__main__':
 
-  
+  model = load_model()
+
+  loss_fn =  nn.MSELoss()
+
+  optimizer = torch.optim.Adam(
+    model.parameters(),
+    lr=0.001
+  )
+
+  device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
+  model.to(device)
+  model.train()
+
   load_dotenv()
 
   ds = IteratorWrap(
@@ -190,36 +230,42 @@ if __name__ == '__main__':
 
   for i, (inputs, gt) in enumerate(ds):
 
-    inputs = inputs.float().to(device)
-    gt = gt.float().to(device)
+    try:
 
-    optimizer.zero_grad()
+      inputs = inputs.float().to(device)
+      gt = gt.float().to(device)
 
-    output = model.forward(inputs)
-    
-    output = nn.functional.interpolate(output, (gt.shape[2:4]))
+      optimizer.zero_grad()
 
-    loss = loss_fn(output, gt)
+      output = model.forward(inputs)
+      
+      output = nn.functional.interpolate(output, (gt.shape[2:4]))
 
-    loss.backward()
-    optimizer.step()
+      loss = loss_fn(output, gt)
 
-    loss_sum += loss.item()
+      loss.backward()
+      optimizer.step()
 
-    i += 1
+      loss_sum += loss.item()
 
-    if i % report_interval == 0:
+      i += 1
 
-      print(f'Avg loss: {loss_sum/report_interval}')
+      if i % report_interval == 0:
 
-      loss_sum = 0
+        print(f'Avg loss: {loss_sum/report_interval}')
 
-      torch.save(model.state_dict(), model_path)
+        loss_sum = 0
+
+        torch.save(model.state_dict(), model_path)
 
 
-    if visualize:
-      display_batch(inputs, gt)
+      if visualize:
+        display_batch(inputs, gt)
 
-    
+    except:
+
+      # probably CUDA out of memory (just skipping those batches for now due to laziness)
+      # TODO: make sure batches don't exceed available memory
+      pass    
 
     

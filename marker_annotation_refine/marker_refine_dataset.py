@@ -276,6 +276,21 @@ class CSPolygon:
       low_pass_factor=np.random.uniform(10, 100)
     )
 
+  def draw_random_marker(self, w, h):
+
+    x0,y0,_,_ = self.bounding_box()
+    marker = self.random_marker()
+    img_marker = Image.new('F', (w, h), 0)
+    
+    draw_single_line(
+      ImageDraw.Draw(img_marker),
+      x0, y0,
+      marker['brushSize'],
+      marker['points']
+    )
+
+    return img_marker
+
   def bounding_box(self, padx=None, pady=None):
 
     '''
