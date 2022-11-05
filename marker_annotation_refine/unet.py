@@ -6,9 +6,9 @@ import torchvision
 class Block(nn.Module):
   def __init__(self, in_ch, out_ch):
     super().__init__()
-    self.conv1 = nn.Conv2d(in_ch, out_ch, 3)
+    self.conv1 = nn.Conv2d(in_ch, out_ch, 3, padding=1)
     self.relu  = nn.ReLU()
-    self.conv2 = nn.Conv2d(out_ch, out_ch, 3)
+    self.conv2 = nn.Conv2d(out_ch, out_ch, 3, padding=1)
   
   def forward(self, x):
     return self.conv2(self.relu(self.conv1(x)))
@@ -67,5 +67,5 @@ class UNet(nn.Module):
     enc_ftrs = self.encoder(x)
     out      = self.decoder(enc_ftrs[::-1][0], enc_ftrs[::-1][1:])
     out      = self.head(out)
-
+    
     return out

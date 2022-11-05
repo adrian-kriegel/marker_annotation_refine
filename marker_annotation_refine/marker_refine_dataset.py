@@ -1,6 +1,7 @@
 
 import math
 import os
+from re import A
 import typing
 from glob import glob
 
@@ -223,15 +224,23 @@ class CSPolygon:
 
     return abs(x1 - x0), abs(y1 - y0) 
 
-  def bounds(self):
+  def bounds(self, alignment=4):
 
     if self.__bounds == None:
       x,y = self.x,self.y
 
-      x0 = np.min(x)
-      x1 = np.max(x)
-      y0 = np.min(y)
-      y1 = np.max(y)
+      a = alignment
+
+      x0 = (np.min(x)//a)*a
+      x1 = (np.max(x)//a)*a
+      y0 = (np.min(y)//a)*a
+      y1 = (np.max(y)//a)*a
+
+      if (x1 - x0) % 2 == 1:
+        x1 += 1
+
+      if (y1 - y0) % 2 == 1:
+        y1 += 1
 
       self.__bounds = x0,x1,y0,y1
 
@@ -300,10 +309,12 @@ class CSPolygon:
     w,h = self.dims()
 
     if padx == None:
-      padx = CROP_PADDING*w
+      padx = int(CROP_PADDING*w)
+      if padx % 2 == 1: padx +=1
 
     if pady == None:
-      pady = CROP_PADDING*h
+      pady = int(CROP_PADDING*h)
+      if pady % 2 == 1: pady +=1
 
     x0,x1,y0,y1 = self.bounds()
 

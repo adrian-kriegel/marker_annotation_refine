@@ -36,7 +36,7 @@ model_path = 'models/unet_denoise.pt'
 max_noise_level = 10
 noise_mix = 0.5
 display_level = 9
-report_interval = 20
+report_interval = 80
 
 img_to_tensor = transforms.PILToTensor()
 tensor_to_img = transforms.ToPILImage()
@@ -230,6 +230,11 @@ if __name__ == '__main__':
 
   for i, (inputs, gt) in enumerate(ds):
 
+    h,w = gt.shape[2:4]
+
+    if w*h > 100000:
+      continue
+
     try:
 
       inputs = inputs.float().to(device)
@@ -239,8 +244,6 @@ if __name__ == '__main__':
 
       output = model.forward(inputs)
       
-      output = nn.functional.interpolate(output, (gt.shape[2:4]))
-
       loss = loss_fn(output, gt)
 
       loss.backward()
@@ -262,7 +265,8 @@ if __name__ == '__main__':
       if visualize:
         display_batch(inputs, gt)
 
-    except:
+    except Exception as e:
+      raise e # TODO: remove
 
       # probably CUDA out of memory (just skipping those batches for now due to laziness)
       # TODO: make sure batches don't exceed available memory

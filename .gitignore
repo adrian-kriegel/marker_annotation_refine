@@ -6,4 +6,3 @@ dataset/
 **/__pycache__
 *.egg-info
 models/unet.pt
-models/unet_denoise.pt

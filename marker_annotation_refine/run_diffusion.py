@@ -13,8 +13,8 @@ from marker_annotation_refine.train_diffusion import \
   create_input_tensor, \
   load_model
 
-iterations = 10
-step_size = 0.2
+iterations = 300
+step_size = 0.4
 
 with torch.no_grad():
 
@@ -35,6 +35,9 @@ with torch.no_grad():
 
     img_cam = polygon.cropped_img()
 
+    if img_cam.width * img_cam.height > 50000:
+      continue
+
     inp = create_input_tensor(
       img_cam,
       polygon.draw_random_marker(img_cam.width, img_cam.height),
@@ -46,15 +49,10 @@ with torch.no_grad():
     for i in range(iterations):
 
       est_noise = model.forward(inp)
-      
-      est_noise = torch.nn.functional.interpolate(
-        est_noise,
-        inp.shape[2:4]
-      ).reshape(inp.shape[2:4])
 
-      inp[0,4,:,:] -= est_noise * step_size
+      inp[0,4,:,:] -= est_noise.reshape(inp.shape[2:4]) * step_size
 
-    # resulting image will be contained in the input
+    # resulting image will be contained in the input (see for-loop above)
     outimg = inp[0,4,:,:].cpu().numpy()
 
     outimg /= np.max(outimg)
