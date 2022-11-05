@@ -1,5 +1,4 @@
 
-import math
 import os
 
 from dotenv import load_dotenv
@@ -13,18 +12,15 @@ from torch import nn
 
 from torchvision import transforms
 
-from skimage.util import random_noise
-
-from PIL import Image, ImageDraw
+from PIL import Image
 
 from marker_annotation_refine.iterator_utils import \
   IteratorWrap
 
-from marker_annotation_refine.marker_annotation import draw_single_line \
-
 from marker_annotation_refine.marker_refine_dataset import \
   CSPolygon, \
   PolygonDataset
+
 from marker_annotation_refine.unet import UNet
 
 
