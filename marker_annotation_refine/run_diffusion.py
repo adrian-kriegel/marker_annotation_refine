@@ -60,7 +60,7 @@ with torch.no_grad():
 
     # set the initial noise input
     # prime with edges from an edge detector
-    inp[0,4,:,:] = edges # torch.rand_like(inp[0,4])
+    inp[0,4,:,:] = torch.rand_like(inp[0,4])
 
     # tracks evolution of mean of noise predictions
     noise_per_iteration = np.zeros((iterations))

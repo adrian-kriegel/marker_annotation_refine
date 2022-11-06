@@ -67,5 +67,6 @@ class UNet(nn.Module):
     enc_ftrs = self.encoder(x)
     out      = self.decoder(enc_ftrs[::-1][0], enc_ftrs[::-1][1:])
     out      = self.head(out)
+    out      = torch.sigmoid(out)
     
     return out
