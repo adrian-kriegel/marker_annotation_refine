@@ -25,7 +25,7 @@ from marker_annotation_refine.unet import UNet
 
 
 
-visualize = True
+visualize = False
 
 model_path = 'models/unet_denoise.pt'
 
