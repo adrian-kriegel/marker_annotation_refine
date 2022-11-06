@@ -24,11 +24,10 @@ from marker_annotation_refine.marker_refine_dataset import \
 from marker_annotation_refine.unet import UNet
 
 
-
 visualize = False
 
 model_path = 'models/unet_denoise.pt'
-
+use_cpu = True
 max_noise_level = 15
 display_level = 1
 report_interval = 80
@@ -115,7 +114,7 @@ def load_polygon_as_batch(
   noise[1:,:,:] = torch.rand((n - 1, h, w))
 
   # mix factors
-  mix = np.arange(n)/n
+  mix = np.arange(n)/n * 4.0
 
   for i in range(1, n):
 
@@ -125,7 +124,7 @@ def load_polygon_as_batch(
   for i in range(n):
 
     # noisy gt
-    inputs[i, ch_noisy_gt, :, :] = (1.0 - mix[i]) * img_gt + noise[i]
+    inputs[i, ch_noisy_gt, :, :] = img_gt + noise[i]
 
   return inputs, noise.reshape((n, 1, h, w))
 
@@ -204,7 +203,7 @@ if __name__ == '__main__':
     lr=0.001
   )
 
-  device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+  device = torch.device("cuda") if torch.cuda.is_available() and not use_cpu else torch.device("cpu")
 
   model.to(device)
   model.train()

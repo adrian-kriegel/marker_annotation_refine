@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 from matplotlib import pyplot as plt
 import numpy as np
 
+from skimage import feature
+
 import torch
 from marker_annotation_refine.edge_detection import edge_detect
 
@@ -16,20 +18,24 @@ from marker_annotation_refine.train_diffusion import \
   load_model
 
 # max. number of iterations to perform
-iterations = 100
+iterations = 500
 # factor for each step
-step_size = 0.7
+step_size = 5.0 / iterations
 # decay factor for step size (bigger -> faster descent)
-step_decay = 0.2
+step_decay = 3.0 / iterations
 # break once mean of predicted noise is smaller than this value
-noise_threshold = 0.11
+noise_threshold = -1
+# mixes the initial value back into the image each iteration (relative to current step size)
+mix_initial = 0.0
+
+normalize_input = False
 
 step_sizes = np.exp(- step_decay * np.arange(iterations)) * step_size
 
 with torch.no_grad():
 
-  device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-
+  # device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+  device = torch.device('cpu')
   model = load_model()
   model.eval()
   model.to(device)
@@ -54,24 +60,45 @@ with torch.no_grad():
     ).to(device)
 
     start = time.time()
-    edges = torch.from_numpy(edge_detect(np.array(img_cam), original_shape=True))
+
+    edges = edge_detect(np.array(img_cam), original_shape=True)
+    # edges = (feature.canny(np.array(img_cam)[:,:,0]) + feature.canny(np.array(img_cam)[:,:,1]) + feature.canny(np.array(img_cam)[:,:,2])) / 3.0
+    edges = torch.from_numpy(edges)
 
     print(f'Edge detection: {time.time() - start}')
 
+    gt = np.array(polygon.draw_outline())
+
     # set the initial noise input
     # prime with edges from an edge detector
-    inp[0,4,:,:] = torch.rand_like(inp[0,4])
+    initial = torch.maximum(torch.rand_like(inp[0,4]), edges)
+
+    # initial = torch.from_numpy(gt) + torch.rand_like(inp[0,4])
+    inp[0,4,:,:] = torch.clone(initial)
 
     # tracks evolution of mean of noise predictions
     noise_per_iteration = np.zeros((iterations))
-
+    error_per_iteration = np.zeros((iterations))
     start = time.time()
+
+    outimg = np.zeros(inp[0,4].shape)
 
     for i in range(iterations):
 
+      # normalize the input
+      if normalize_input:
+        inp[0,4,:,:] -= torch.min(inp[0,4,:,:])
+        inp[0,4,:,:] /= torch.max(inp[0,4,:,:])
+
       est_noise = model.forward(inp)
 
+      # subtract some of the noise from the current input
       inp[0,4,:,:] -= est_noise.reshape(inp.shape[2:4]) * step_sizes[i]
+
+      # re-introduce some of the initial priming features
+      inp[0,4,:,:] += step_sizes[i]*mix_initial*edges
+
+      
 
       noise_mean = np.mean(np.abs(est_noise.cpu().numpy()))
 
@@ -80,10 +107,13 @@ with torch.no_grad():
       if noise_mean < noise_threshold:
         break
 
-    print(f'Diffusion: {time.time() - start}')
+      outimg = inp[0,4,:,:].cpu().numpy()
+      outimg -= np.min(outimg)
+      outimg /= np.max(outimg)
 
-    # resulting image will be contained in the input (see for-loop above)
-    outimg = inp[0,4,:,:].cpu().numpy()
+      error_per_iteration[i] = np.mean(np.abs(outimg - gt))
+
+    print(f'Diffusion: {time.time() - start}')
 
     outimg /= np.max(outimg)
 
@@ -97,16 +127,18 @@ with torch.no_grad():
 
     plt.subplot(1,4,3)
 
-    plt.imshow(edges)
+    plt.imshow(initial.cpu().numpy())
 
     plt.subplot(1,4,4)
 
     plt.imshow(outimg)
 
-    # plt.figure()
+    plt.figure()
 
-    # plt.plot(range(iterations), noise_per_iteration)
-    # plt.plot(range(iterations), step_sizes)
+    plt.plot(range(iterations), noise_per_iteration, label='noise int.')
+    plt.plot(range(iterations), error_per_iteration, label='error')
+
+    plt.legend()
 
     plt.show()
 
