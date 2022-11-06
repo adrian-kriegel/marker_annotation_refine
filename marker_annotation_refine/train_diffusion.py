@@ -25,13 +25,12 @@ from marker_annotation_refine.unet import UNet
 
 
 
-visualize = False
+visualize = True
 
 model_path = 'models/unet_denoise.pt'
 
-max_noise_level = 10
-noise_mix = 0.5
-display_level = 9
+max_noise_level = 15
+display_level = 1
 report_interval = 80
 
 img_to_tensor = transforms.PILToTensor()
@@ -81,8 +80,7 @@ def create_input_tensor(
 
 def load_polygon_as_batch(
   p : CSPolygon,
-  noise_levels : int,
-  mix = 0.2
+  noise_levels : int
 ):
 
   '''
@@ -93,9 +91,6 @@ def load_polygon_as_batch(
   outputs: 1 channel image of respective noise
   '''
 
-  # index of the channel containing the marker data
-  ch_marker = 3
-
   # index of the channel containing the noisy gt image
   ch_noisy_gt = 4
 
@@ -104,31 +99,33 @@ def load_polygon_as_batch(
   img_cam = p.cropped_img()
   img_gt = torch.from_numpy(p.draw_outline())
 
-
   h, w = img_gt.shape[0:2]
 
   # generate the marker intensity image 
+  img_marker = p.draw_random_marker(w, h)
 
   inputs = create_input_tensor(
     img_cam,
-    p.draw_random_marker(w, h),
+    img_marker,
     n,
   )
 
   noise = torch.zeros((n, h, w))
 
-  noise[0] = torch.rand((h, w)) * mix
+  noise[1:,:,:] = torch.rand((n - 1, h, w))
 
-  # generate progessive additive noise
+  # mix factors
+  mix = np.arange(n)/n
+
   for i in range(1, n):
 
-    noise[i] = noise[i - 1] + torch.rand((h, w)) * mix
+    noise[i] *= mix[i]
 
   # populate the part of the inputs containing the noisy gt images
   for i in range(n):
 
     # noisy gt
-    inputs[i, ch_noisy_gt, :, :] = (1.0 - mix) * img_gt + noise[i]
+    inputs[i, ch_noisy_gt, :, :] = (1.0 - mix[i]) * img_gt + noise[i]
 
   return inputs, noise.reshape((n, 1, h, w))
 
@@ -219,7 +216,7 @@ if __name__ == '__main__':
       os.environ['CITYSCAPES_LOCATION'],
       'train',
     ),
-    lambda p: load_polygon_as_batch(p, max_noise_level, noise_mix)
+    lambda p: load_polygon_as_batch(p, max_noise_level)
   )
 
   loss_sum = 0
