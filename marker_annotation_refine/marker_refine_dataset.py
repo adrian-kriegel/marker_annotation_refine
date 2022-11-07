@@ -1,6 +1,7 @@
 
 import math
 import os
+import random
 from re import A
 import typing
 from glob import glob
@@ -358,12 +359,17 @@ class CSDataset:
   def __init__(
     self,
     dataset_path : str,
-    mode : str = 'train'
+    mode : str = 'train',
+    shuffle=True
   ):
 
     self.dataset_path = dataset_path
 
     self.image_names = get_image_names(dataset_path, mode)
+
+    if shuffle:
+
+      random.shuffle(self.image_names)
   
   def __iter__(self):
 
