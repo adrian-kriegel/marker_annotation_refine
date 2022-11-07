@@ -170,6 +170,7 @@ def display_batch(inputs, outputs):
 def load_model(
   model_path='models/unet_denoise.pt',
   accept_empty=False,
+  device=None
 ):
 
   model = UNet(
@@ -180,7 +181,7 @@ def load_model(
 
   try:
 
-    model.load_state_dict(torch.load(model_path))
+    model.load_state_dict(torch.load(model_path, map_location=device))
 
   except OSError as e:
     if accept_empty:

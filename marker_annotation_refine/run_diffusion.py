@@ -18,17 +18,18 @@ from marker_annotation_refine.train_diffusion import \
   load_model
 
 # max. number of iterations to perform
-iterations = 500
+iterations = 20
 # factor for each step
-step_size = 5.0 / iterations
+step_size = 0.5#10.0 / iterations
 # decay factor for step size (bigger -> faster descent)
-step_decay = 3.0 / iterations
+step_decay = 1.0 / iterations
 # break once mean of predicted noise is smaller than this value
 noise_threshold = -1
 # mixes the initial value back into the image each iteration (relative to current step size)
-mix_initial = 0.0
+mix_initial = 0.1
 
 normalize_input = False
+clip_input = True
 
 step_sizes = np.exp(- step_decay * np.arange(iterations)) * step_size
 
@@ -36,7 +37,7 @@ with torch.no_grad():
 
   # device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
   device = torch.device('cpu')
-  model = load_model()
+  model = load_model(device=device)
   model.eval()
   model.to(device)
 
@@ -54,24 +55,27 @@ with torch.no_grad():
     if img_cam.width * img_cam.height > 50000:
       continue
 
+    img_marker = polygon.draw_random_marker(img_cam.width, img_cam.height)
+
     inp = create_input_tensor(
       img_cam,
-      polygon.draw_random_marker(img_cam.width, img_cam.height),
+      img_marker,
     ).to(device)
 
     start = time.time()
 
     edges = edge_detect(np.array(img_cam), original_shape=True)
-    # edges = (feature.canny(np.array(img_cam)[:,:,0]) + feature.canny(np.array(img_cam)[:,:,1]) + feature.canny(np.array(img_cam)[:,:,2])) / 3.0
+    edges = (feature.canny(np.array(img_cam)[:,:,0]) + feature.canny(np.array(img_cam)[:,:,1]) + feature.canny(np.array(img_cam)[:,:,2])) / 3.0
     edges = torch.from_numpy(edges)
 
     print(f'Edge detection: {time.time() - start}')
 
     gt = np.array(polygon.draw_outline())
 
-    # set the initial noise input
+    initial = torch.from_numpy(np.array(img_marker))
+
     # prime with edges from an edge detector
-    initial = torch.maximum(torch.rand_like(inp[0,4]), edges)
+    # initial = torch.maximum(torch.rand_like(inp[0,4]), edges)
 
     # initial = torch.from_numpy(gt) + torch.rand_like(inp[0,4])
     inp[0,4,:,:] = torch.clone(initial)
@@ -85,10 +89,15 @@ with torch.no_grad():
 
     for i in range(iterations):
 
+      if clip_input:
+
+        inp[0,4,:,:] = torch.clip(inp[0,4,:,:], -1.0, 1.0)
+
       # normalize the input
       if normalize_input:
         inp[0,4,:,:] -= torch.min(inp[0,4,:,:])
         inp[0,4,:,:] /= torch.max(inp[0,4,:,:])
+      
 
       est_noise = model.forward(inp)
 
