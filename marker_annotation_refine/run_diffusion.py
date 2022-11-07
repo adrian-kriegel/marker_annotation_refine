@@ -18,7 +18,7 @@ from marker_annotation_refine.train_diffusion import \
   load_model
 
 # max. number of iterations to perform
-iterations = 20
+iterations = 10
 # factor for each step
 step_size = 0.5#10.0 / iterations
 # decay factor for step size (bigger -> faster descent)
@@ -64,7 +64,7 @@ with torch.no_grad():
 
     start = time.time()
 
-    edges = edge_detect(np.array(img_cam), original_shape=True)
+    #edges = edge_detect(np.array(img_cam), original_shape=True)
     edges = (feature.canny(np.array(img_cam)[:,:,0]) + feature.canny(np.array(img_cam)[:,:,1]) + feature.canny(np.array(img_cam)[:,:,2])) / 3.0
     edges = torch.from_numpy(edges)
 
@@ -72,13 +72,13 @@ with torch.no_grad():
 
     gt = np.array(polygon.draw_outline())
 
-    initial = torch.from_numpy(np.array(img_marker))
-
     # prime with edges from an edge detector
-    # initial = torch.maximum(torch.rand_like(inp[0,4]), edges)
+    tensor_marker = torch.from_numpy(np.array(img_marker))
+    initial = (1.0 + tensor_marker) * edges
+      
 
     # initial = torch.from_numpy(gt) + torch.rand_like(inp[0,4])
-    inp[0,4,:,:] = torch.clone(initial)
+    inp[0,4,:,:] = initial + torch.rand_like(inp[0,4]) * 0.5
 
     # tracks evolution of mean of noise predictions
     noise_per_iteration = np.zeros((iterations))
@@ -105,7 +105,7 @@ with torch.no_grad():
       inp[0,4,:,:] -= est_noise.reshape(inp.shape[2:4]) * step_sizes[i]
 
       # re-introduce some of the initial priming features
-      inp[0,4,:,:] += step_sizes[i]*mix_initial*edges
+      inp[0,4,:,:] += step_sizes[i]*mix_initial*initial
 
       
 
