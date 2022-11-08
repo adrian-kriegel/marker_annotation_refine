@@ -231,7 +231,7 @@ def load_model(
 
   try:
 
-    model.load_state_dict(torch.load(model_path))
+    model.load_state_dict(torch.load(model_path, map_location=device))
 
   except OSError as e:
     if accept_empty:
@@ -262,7 +262,6 @@ if __name__ == '__main__':
 
   model.to(device)
   model.train()
-  model.requires_grad = True
 
   load_dotenv()
 

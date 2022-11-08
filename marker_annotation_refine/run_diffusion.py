@@ -18,16 +18,19 @@ from marker_annotation_refine.train_diffusion import \
 # max. number of iterations to perform
 iterations = 8
 # factor for each step
-step_size = 0.5#10.0 / iterations
+step_size = 0.9
 # decay factor for step size (bigger -> faster descent)
-step_decay = 1.0 / iterations
+step_decay = 3.0 / iterations
 # break once mean of predicted noise is smaller than this value
 noise_threshold = -1
 # mixes the initial value back into the image each iteration (relative to current step size)
-mix_initial = 0.1
+mix_initial = 0.0
 
 normalize_input = False
-clip_input = True
+clip_input = False
+
+# cuts off less activated pixels
+reduce_input = 0.3
 
 step_sizes = np.exp(- step_decay * np.arange(iterations)) * step_size
 
@@ -62,8 +65,8 @@ with torch.no_grad():
 
     start = time.time()
 
-    #edges = edge_detect(np.array(img_cam), original_shape=True)
-    edges = canny(img_cam)
+    edges = edge_detect(np.array(img_cam), original_shape=True)
+    edges += canny(img_cam)
     edges = torch.from_numpy(edges)
 
     print(f'Edge detection: {time.time() - start}')
@@ -72,11 +75,11 @@ with torch.no_grad():
 
     # prime with edges from an edge detector
     tensor_marker = torch.from_numpy(np.array(img_marker))
-    initial = 0.5 * (1.0 + tensor_marker) * edges
+    initial = (1.0 + tensor_marker) * edges
       
 
     # initial = torch.from_numpy(gt) + torch.rand_like(inp[0,4])
-    inp[0,4,:,:] = initial + torch.rand_like(inp[0,4]) * 0.5
+    inp[0,4,:,:] = initial.clone()
 
     # tracks evolution of mean of noise predictions
     noise_per_iteration = np.zeros((iterations))
@@ -95,7 +98,10 @@ with torch.no_grad():
       if normalize_input:
         inp[0,4,:,:] -= torch.min(inp[0,4,:,:])
         inp[0,4,:,:] /= torch.max(inp[0,4,:,:])
-      
+
+      if reduce_input > 0:
+
+        inp[0,4,:,:] *= inp[0,4,:,:] > (reduce_input * torch.max(inp[0,4,:,:]))
 
       est_noise = model.forward(inp)
 
