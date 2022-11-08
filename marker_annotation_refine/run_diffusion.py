@@ -5,10 +5,8 @@ from dotenv import load_dotenv
 from matplotlib import pyplot as plt
 import numpy as np
 
-from skimage import feature
-
 import torch
-from marker_annotation_refine.edge_detection import edge_detect
+from marker_annotation_refine.edge_detection import canny, edge_detect
 
 from marker_annotation_refine.marker_refine_dataset import \
   PolygonDataset
@@ -18,7 +16,7 @@ from marker_annotation_refine.train_diffusion import \
   load_model
 
 # max. number of iterations to perform
-iterations = 10
+iterations = 8
 # factor for each step
 step_size = 0.5#10.0 / iterations
 # decay factor for step size (bigger -> faster descent)
@@ -65,7 +63,7 @@ with torch.no_grad():
     start = time.time()
 
     #edges = edge_detect(np.array(img_cam), original_shape=True)
-    edges = (feature.canny(np.array(img_cam)[:,:,0]) + feature.canny(np.array(img_cam)[:,:,1]) + feature.canny(np.array(img_cam)[:,:,2])) / 3.0
+    edges = canny(img_cam)
     edges = torch.from_numpy(edges)
 
     print(f'Edge detection: {time.time() - start}')
@@ -74,7 +72,7 @@ with torch.no_grad():
 
     # prime with edges from an edge detector
     tensor_marker = torch.from_numpy(np.array(img_marker))
-    initial = (1.0 + tensor_marker) * edges
+    initial = 0.5 * (1.0 + tensor_marker) * edges
       
 
     # initial = torch.from_numpy(gt) + torch.rand_like(inp[0,4])

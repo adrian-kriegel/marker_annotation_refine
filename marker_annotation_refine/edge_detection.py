@@ -2,6 +2,8 @@
 
 
 import os
+from PIL import Image
+import typing
 from dotenv import load_dotenv
 import numpy
 import torch
@@ -9,8 +11,8 @@ import torch.backends.cudnn
 import numpy as np
 from skimage.transform import resize
 import numpy as np
-from skimage.filters import unsharp_mask
-
+from skimage import feature
+from skimage.color import rgb2hsv
 
 from marker_annotation_refine.marker_refine_dataset import \
   PolygonDataset
@@ -180,7 +182,15 @@ def edge_detect(img, original_shape=False):
 
   return resize(res, img.shape[0:2]) if original_shape else res
 
+def canny(img : typing.Union[np.ndarray, Image.Image]):
 
+  hsv = rgb2hsv(np.array(img))
+
+  return (\
+    0.5 * feature.canny(hsv[:,:,0]) + \
+    0.25 * feature.canny(hsv[:,:,1]) + \
+    0.25 * feature.canny(hsv[:,:,2])
+  )
 
 if __name__ == '__main__':
 

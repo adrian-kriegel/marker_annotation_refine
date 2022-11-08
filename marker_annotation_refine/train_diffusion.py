@@ -13,6 +13,8 @@ from torch import nn
 from torchvision import transforms
 
 from PIL import Image
+from marker_annotation_refine.edge_detection import canny
+from marker_annotation_refine.geometry_util import mask_to_distances
 
 from marker_annotation_refine.iterator_utils import \
   IteratorWrap
@@ -27,10 +29,9 @@ from marker_annotation_refine.unet import UNet
 visualize = False
 
 model_path = 'models/unet_denoise.pt'
-use_cpu = True
+use_cpu = False
 max_noise_level = 15
-display_level = 1
-report_interval = 80
+report_interval = 150
 
 img_to_tensor = transforms.PILToTensor()
 tensor_to_img = transforms.ToPILImage()
@@ -76,6 +77,47 @@ def create_input_tensor(
 
   return res
 
+def gaussian(x, mu, sig):
+  return np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
+
+def build_canny_noise(
+  img_gt : np.ndarray,
+  img_cam : Image.Image,
+  n : int
+):
+
+  '''
+  Builds up n levels of "noise" based on canny edges.
+  '''
+
+  h, w = img_cam.height, img_cam.width
+
+  s = min(h, w)
+
+  noise = torch.zeros((n, h, w))
+
+  edges = canny(img_cam)
+
+  # how far away is each edge in the canny edge detection from the gt?
+  distances, coords = mask_to_distances(
+    edges,
+    img_gt
+  )
+
+  distances /= s
+
+  for i in range(1, n):
+
+    weights = np.zeros(img_gt.shape)
+
+    ci,cj = coords.transpose()
+
+    weights[ci,cj] = gaussian(distances, 0, i/n / 2)
+
+    noise[i] = torch.from_numpy(weights) * (1.0 + i/n)
+
+  return noise
+
 
 def load_polygon_as_batch(
   p : CSPolygon,
@@ -96,7 +138,7 @@ def load_polygon_as_batch(
   n = noise_levels
 
   img_cam = p.cropped_img()
-  img_gt = torch.from_numpy(p.draw_outline())
+  img_gt = p.draw_outline()
 
   h, w = img_gt.shape[0:2]
 
@@ -109,16 +151,9 @@ def load_polygon_as_batch(
     n,
   )
 
-  noise = torch.zeros((n, h, w))
+  noise = build_canny_noise(img_gt, img_cam, n)
 
-  noise[1:,:,:] = torch.rand((n - 1, h, w))
-
-  # mix factors
-  mix = np.arange(n)/n * 4.0
-
-  for i in range(1, n):
-
-    noise[i] *= mix[i]
+  img_gt = torch.from_numpy(img_gt)
 
   # populate the part of the inputs containing the noisy gt images
   for i in range(n):
@@ -138,30 +173,37 @@ def display_batch(inputs, outputs):
 
   inputs, outputs = inputs.detach().cpu().numpy(), outputs.detach().cpu().numpy()
 
-  plt.subplot(2, 2, 1)
 
   marker = inputs[0, 3]
 
-  noisy_gt = inputs[display_level, 4]
+  noisy_gt_0 = inputs[1, 4]
+  noise_0 = outputs[1, 0]
+  gt_0 = noisy_gt_0 - noise_0
+  gt_0 /= np.max(gt_0)
 
-  noise = outputs[display_level, 0]
+  noisy_gt_1 = inputs[max_noise_level - 1, 4]
+  noise_1 = outputs[max_noise_level - 1, 0]
+  gt_1 = noisy_gt_1 - noise_1
+  gt_1 /= np.max(gt_1)
 
-  gt = noisy_gt - noise
-  gt /= np.max(gt)
-
+  plt.subplot(2, 3, 1)
   plt.imshow(img)
 
-  plt.subplot(2,2,2)
+  plt.subplot(2,3,2)
 
   plt.imshow(marker)
 
-  plt.subplot(2,2,3)
+  plt.subplot(2,3,3)
 
-  plt.imshow(gt)
+  plt.imshow(gt_0)
 
-  plt.subplot(2,2,4)
+  plt.subplot(2,3,4)
 
-  plt.imshow(noisy_gt)
+  plt.imshow(noisy_gt_0)
+
+  plt.subplot(2,3,5)
+
+  plt.imshow(noisy_gt_1)
 
   plt.show()
 
@@ -195,7 +237,11 @@ def load_model(
 
 if __name__ == '__main__':
 
-  model = load_model()
+  device = torch.device("cuda") if torch.cuda.is_available() and not use_cpu else torch.device("cpu")
+
+  print(f'Using device {device}.')
+
+  model = load_model(device=device)
 
   loss_fn =  nn.MSELoss()
 
@@ -203,8 +249,6 @@ if __name__ == '__main__':
     model.parameters(),
     lr=0.001
   )
-
-  device = torch.device("cuda") if torch.cuda.is_available() and not use_cpu else torch.device("cpu")
 
   model.to(device)
   model.train()
@@ -239,7 +283,7 @@ if __name__ == '__main__':
       
       loss = loss_fn(output, gt)
 
-      loss.backward()
+      # loss.backward()
       optimizer.step()
 
       loss_sum += loss.item()

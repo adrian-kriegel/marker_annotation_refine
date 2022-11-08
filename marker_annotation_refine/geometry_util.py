@@ -1,4 +1,5 @@
 
+import typing
 from PIL import ImageDraw, Image
 
 from rasterio import features, transform
@@ -115,3 +116,25 @@ def rasterize_line(
   )
 
   return np.transpose(np.array(line).nonzero())
+
+def mask_to_distances(
+  img : np.ndarray,
+  mask : np.ndarray,
+):
+
+  '''
+  Given two binary images, the shortest distance between nonzero pixels is calculated.
+  Returns distances, coords where coords are the nonzero pixels of img
+  '''
+
+  coords_img = np.array(img.nonzero()).transpose()
+  coords_mask = np.array(mask.nonzero()).transpose()
+
+  dist = distance_matrix(
+    coords_img,
+    coords_mask
+  )
+
+  dist = np.min(dist, axis=1)
+
+  return dist, coords_img
