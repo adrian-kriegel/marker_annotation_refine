@@ -5,6 +5,9 @@ import numpy as np
 
 import torch
 
+class SkipException(Exception):
+
+  pass
 
 class IteratorBatcher:
 
@@ -49,4 +52,7 @@ class IteratorWrap:
 
   def __next__(self):
 
-    return self.wrap(self.it.__next__())
+    try:
+      return self.wrap(self.it.__next__())
+    except SkipException:
+      return self.__next__()

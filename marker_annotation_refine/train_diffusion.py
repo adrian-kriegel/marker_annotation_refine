@@ -17,7 +17,8 @@ from marker_annotation_refine.edge_detection import canny
 from marker_annotation_refine.geometry_util import mask_to_distances
 
 from marker_annotation_refine.iterator_utils import \
-  IteratorWrap
+  IteratorWrap, \
+  SkipException
 
 from marker_annotation_refine.marker_refine_dataset import \
   CSPolygon, \
@@ -31,7 +32,10 @@ visualize = False
 model_path = 'models/unet_denoise.pt'
 use_cpu = False
 max_noise_level = 15
-report_interval = 150
+report_interval = 10
+
+# skip images larger than this value
+img_area_limit = 50000
 
 img_to_tensor = transforms.PILToTensor()
 tensor_to_img = transforms.ToPILImage()
@@ -94,7 +98,7 @@ def build_canny_noise(
 
   s = min(h, w)
 
-  noise = torch.zeros((n, h, w))
+  noise = np.zeros((n, h, w))
 
   edges = canny(img_cam)
 
@@ -114,9 +118,9 @@ def build_canny_noise(
 
     weights[ci,cj] = gaussian(distances, 0, i/n / 2)
 
-    noise[i] = torch.from_numpy(weights) * (1.0 + i/n)
+    noise[i] = weights * (1.0 + i/n)
 
-  return noise
+  return torch.from_numpy(noise)
 
 
 def load_polygon_as_batch(
@@ -138,9 +142,13 @@ def load_polygon_as_batch(
   n = noise_levels
 
   img_cam = p.cropped_img()
-  img_gt = p.draw_outline()
 
-  h, w = img_gt.shape[0:2]
+  h, w = img_cam.height, img_cam.width
+
+  if w*h > img_area_limit:
+    raise SkipException()
+
+  img_gt = p.draw_outline()
 
   # generate the marker intensity image 
   img_marker = p.draw_random_marker(w, h)
@@ -223,7 +231,7 @@ def load_model(
 
   try:
 
-    model.load_state_dict(torch.load(model_path, map_location=device))
+    model.load_state_dict(torch.load(model_path))
 
   except OSError as e:
     if accept_empty:
@@ -237,11 +245,13 @@ def load_model(
 
 if __name__ == '__main__':
 
+  torch.set_grad_enabled(True)
+
   device = torch.device("cuda") if torch.cuda.is_available() and not use_cpu else torch.device("cpu")
 
   print(f'Using device {device}.')
 
-  model = load_model(device=device)
+  model = load_model(accept_empty=True) # load_model(device=device)
 
   loss_fn =  nn.MSELoss()
 
@@ -252,6 +262,7 @@ if __name__ == '__main__':
 
   model.to(device)
   model.train()
+  model.requires_grad = True
 
   load_dotenv()
 
@@ -269,23 +280,20 @@ if __name__ == '__main__':
 
     h,w = gt.shape[2:4]
 
-    if w*h > 100000:
-      continue
-
     try:
 
       inputs = inputs.float().to(device)
+      
       gt = gt.float().to(device)
-
+      
       optimizer.zero_grad()
 
       output = model.forward(inputs)
-      
+    
       loss = loss_fn(output, gt)
-
-      # loss.backward()
+      loss.backward()
       optimizer.step()
-
+     
       loss_sum += loss.item()
 
       i += 1
@@ -303,7 +311,7 @@ if __name__ == '__main__':
         display_batch(inputs, gt)
 
     except Exception as e:
-      raise e # TODO: remove
+      # raise e # TODO: remove
 
       # probably CUDA out of memory (just skipping those batches for now due to laziness)
       # TODO: make sure batches don't exceed available memory
