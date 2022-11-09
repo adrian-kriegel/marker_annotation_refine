@@ -32,13 +32,17 @@ visualize = False
 model_path = 'models/unet_denoise.pt'
 use_cpu = False
 max_noise_level = 15
-report_interval = 10
+report_interval = 50
 
 # skip images larger than this value
 img_area_limit = 50000
 
 img_to_tensor = transforms.PILToTensor()
 tensor_to_img = transforms.ToPILImage()
+
+target_shape = (300, 300)
+
+transform_inputs = transforms.Resize(target_shape)
 
 def create_input_tensor(
   img_cam : Image.Image,
@@ -224,8 +228,8 @@ def load_model(
 ):
 
   model = UNet(
-    enc_chs=(5, 64, 128),
-    dec_chs=(128, 64),
+    enc_chs=(5, 64, 128, 256),
+    dec_chs=(256, 128, 64),
     num_class=1,
   )
 
@@ -281,9 +285,9 @@ if __name__ == '__main__':
 
     try:
 
-      inputs = inputs.float().to(device)
+      inputs = transform_inputs(inputs).float().to(device)
       
-      gt = gt.float().to(device)
+      gt = transform_inputs(gt).float().to(device)
       
       optimizer.zero_grad()
 
