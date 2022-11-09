@@ -27,7 +27,7 @@ from marker_annotation_refine.marker_refine_dataset import \
 from marker_annotation_refine.unet import UNet
 
 
-visualize = False
+visualize = True
 
 model_path = 'models/unet_denoise.pt'
 use_cpu = False
@@ -197,6 +197,8 @@ def display_batch(inputs, outputs):
   plt.subplot(2, 3, 1)
   plt.imshow(img)
 
+  plt.imshow(gt_0, alpha=0.3)
+
   plt.subplot(2,3,2)
 
   plt.imshow(marker)
@@ -251,7 +253,7 @@ if __name__ == '__main__':
 
   print(f'Using device {device}.')
 
-  model = load_model(accept_empty=True) # load_model(device=device)
+  model = load_model(accept_empty=True, device=device) # load_model(device=device)
 
   loss_fn =  nn.MSELoss()
 
@@ -310,7 +312,7 @@ if __name__ == '__main__':
         display_batch(inputs, gt)
 
     except Exception as e:
-      # raise e # TODO: remove
+      raise e # TODO: remove
 
       # probably CUDA out of memory (just skipping those batches for now due to laziness)
       # TODO: make sure batches don't exceed available memory

@@ -11,26 +11,31 @@ from marker_annotation_refine.edge_detection import canny, edge_detect
 from marker_annotation_refine.marker_refine_dataset import \
   PolygonDataset
 
+from marker_annotation_refine.noise import \
+  perlin_noise
+
 from marker_annotation_refine.train_diffusion import \
   create_input_tensor, \
   load_model
 
 # max. number of iterations to perform
-iterations = 8
+iterations = 12
 # factor for each step
 step_size = 0.9
 # decay factor for step size (bigger -> faster descent)
-step_decay = 3.0 / iterations
+step_decay = 2.0 / iterations
 # break once mean of predicted noise is smaller than this value
 noise_threshold = -1
 # mixes the initial value back into the image each iteration (relative to current step size)
 mix_initial = 0.0
+# mixes in random perlin noise at each iteration
+mix_noise = 0.0
 
 normalize_input = False
 clip_input = False
 
 # cuts off less activated pixels
-reduce_input = 0.3
+reduce_input = 0.1
 
 step_sizes = np.exp(- step_decay * np.arange(iterations)) * step_size
 
@@ -76,7 +81,7 @@ with torch.no_grad():
     # prime with edges from an edge detector
     tensor_marker = torch.from_numpy(np.array(img_marker))
     initial = (1.0 + tensor_marker) * edges
-      
+    
 
     # initial = torch.from_numpy(gt) + torch.rand_like(inp[0,4])
     inp[0,4,:,:] = initial.clone()
@@ -103,13 +108,30 @@ with torch.no_grad():
 
         inp[0,4,:,:] *= inp[0,4,:,:] > (reduce_input * torch.max(inp[0,4,:,:]))
 
+      if mix_initial > 0:
+
+        # re-introduce some of the initial priming features
+        inp[0,4,:,:] += step_sizes[i]*mix_initial*initial
+
+      if mix_noise > 0:
+
+        h,w = inp[0,4,:,:].shape
+
+        perlin = perlin_noise(
+          (h, w),
+          (h // 2, w // 2),
+          seed=i
+        )
+
+        mix = step_sizes[i] * mix_noise
+
+        inp[0,4,:,:] = inp[0,4,:,:]*(1.0-mix) + mix*perlin
+
       est_noise = model.forward(inp)
 
       # subtract some of the noise from the current input
       inp[0,4,:,:] -= est_noise.reshape(inp.shape[2:4]) * step_sizes[i]
 
-      # re-introduce some of the initial priming features
-      inp[0,4,:,:] += step_sizes[i]*mix_initial*initial
 
       
 
