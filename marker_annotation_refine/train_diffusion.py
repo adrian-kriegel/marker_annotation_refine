@@ -27,12 +27,12 @@ from marker_annotation_refine.marker_refine_dataset import \
 from marker_annotation_refine.unet import UNet
 
 
-visualize = True
+visualize = False
 
 model_path = 'models/unet_denoise.pt'
 use_cpu = False
 max_noise_level = 15
-report_interval = 50
+report_interval = 150
 
 # skip images larger than this value
 img_area_limit = 50000
@@ -40,9 +40,35 @@ img_area_limit = 50000
 img_to_tensor = transforms.PILToTensor()
 tensor_to_img = transforms.ToPILImage()
 
-target_shape = (300, 300)
+target_shape = (148, 148)
 
-transform_inputs = transforms.Resize(target_shape)
+t_resize = transforms.Resize(target_shape)
+
+to_pil = transforms.ToPILImage()
+from_pil = transforms.PILToTensor()
+
+def transform_batch(
+  inputs : torch.Tensor,
+  outputs : torch.Tensor
+):
+
+  '''
+  TODO: instead of resizing, crop fixed sized parts of the image in the first place
+  only scale down if too large
+  '''
+
+  res = torch.zeros((*inputs.shape[0:2],*target_shape))
+
+  img_resized = from_pil(to_pil(inputs[0,0:3]).resize(target_shape))
+  
+  for i in range(inputs.shape[0]):
+
+    res[i,0:3,:,:] = img_resized
+
+  res[:,3,:,:] = t_resize(inputs[:,3])
+  res[:,4,:,:] = t_resize(inputs[:,4])
+
+  return res, t_resize(outputs)
 
 def create_input_tensor(
   img_cam : Image.Image,
@@ -232,7 +258,7 @@ def load_model(
   model = UNet(
     enc_chs=(5, 64, 128, 256),
     dec_chs=(256, 128, 64),
-    num_class=1,
+    num_class=2,
   )
 
   try:
@@ -283,25 +309,34 @@ if __name__ == '__main__':
 
   for i, (inputs, gt) in enumerate(ds):
 
-    h,w = gt.shape[2:4]
+    inputs,gt = transform_batch(inputs, gt)
+    
+    n,c,h,w = gt.shape[0:4]
 
     try:
 
-      inputs = transform_inputs(inputs).float().to(device)
+      inputs = inputs.float().to(device)
       
-      gt = transform_inputs(gt).float().to(device)
+      gt = gt.float().to(device)
       
-      optimizer.zero_grad()
 
+      noisy_line = inputs[:, 4]
+      noise = gt[:, 0]
+      line = (noisy_line - noise).reshape((n, 1, h, w))
+
+      optimizer.zero_grad()
       output = model.forward(inputs)
-    
-      loss = loss_fn(output, gt)
+
+      loss = loss_fn(output[:,0].reshape(n,1,h,w), gt) + loss_fn(output[:,1:], line)
       loss.backward()
       optimizer.step()
      
       loss_sum += loss.item()
 
       i += 1
+
+      if visualize:
+        display_batch(inputs, gt)
 
       if i % report_interval == 0:
 
@@ -311,9 +346,6 @@ if __name__ == '__main__':
 
         torch.save(model.state_dict(), model_path)
 
-
-      if visualize:
-        display_batch(inputs, gt)
 
     except Exception as e:
       raise e # TODO: remove
