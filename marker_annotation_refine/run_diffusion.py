@@ -1,6 +1,7 @@
 
 import os
 import time
+from PIL import Image
 from dotenv import load_dotenv
 from matplotlib import pyplot as plt
 import numpy as np
@@ -21,7 +22,7 @@ from marker_annotation_refine.train_diffusion import \
 # max. number of iterations to perform
 iterations = 12
 # factor for each step
-step_size = 0.9
+step_size = 0.5
 # decay factor for step size (bigger -> faster descent)
 step_decay = 2.0 / iterations
 # break once mean of predicted noise is smaller than this value
@@ -36,6 +37,8 @@ clip_input = False
 
 # cuts off less activated pixels
 reduce_input = 0.1
+
+target_size = (300, 300)
 
 step_sizes = np.exp(- step_decay * np.arange(iterations)) * step_size
 
@@ -63,6 +66,9 @@ with torch.no_grad():
 
     img_marker = polygon.draw_random_marker(img_cam.width, img_cam.height)
 
+    img_cam = img_cam.resize(target_size)
+    img_marker = img_marker.resize(target_size)
+
     inp = create_input_tensor(
       img_cam,
       img_marker,
@@ -76,7 +82,7 @@ with torch.no_grad():
 
     print(f'Edge detection: {time.time() - start}')
 
-    gt = np.array(polygon.draw_outline())
+    gt = np.array(Image.fromarray(polygon.draw_outline()).resize(target_size))
 
     # prime with edges from an edge detector
     tensor_marker = torch.from_numpy(np.array(img_marker))
@@ -127,13 +133,14 @@ with torch.no_grad():
 
         inp[0,4,:,:] = inp[0,4,:,:]*(1.0-mix) + mix*perlin
 
-      est_noise = model.forward(inp)
+      output = model.forward(inp)
+
+      est_noise = output[:,0]
+      est_structure = output[:,1]
 
       # subtract some of the noise from the current input
       inp[0,4,:,:] -= est_noise.reshape(inp.shape[2:4]) * step_sizes[i]
-
-
-      
+      inp[0,4,:,:] += est_structure.reshape(inp.shape[2:4]) * step_sizes[i]
 
       noise_mean = np.mean(np.abs(est_noise.cpu().numpy()))
 
