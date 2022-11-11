@@ -17,7 +17,9 @@ from marker_annotation_refine.noise import \
 
 from marker_annotation_refine.train_diffusion import \
   create_input_tensor, \
-  load_model
+  load_model, \
+  transform_input_batch, \
+  transform_output_batch
 
 # max. number of iterations to perform
 iterations = 12
@@ -38,7 +40,7 @@ clip_input = False
 # cuts off less activated pixels
 reduce_input = 0.1
 
-target_size = (300, 300)
+target_size = (148, 148)
 
 step_sizes = np.exp(- step_decay * np.arange(iterations)) * step_size
 
@@ -46,6 +48,7 @@ with torch.no_grad():
 
   # device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
   device = torch.device('cpu')
+  
   model = load_model(device=device)
   model.eval()
   model.to(device)
@@ -66,13 +69,12 @@ with torch.no_grad():
 
     img_marker = polygon.draw_random_marker(img_cam.width, img_cam.height)
 
-    img_cam = img_cam.resize(target_size)
-    img_marker = img_marker.resize(target_size)
-
     inp = create_input_tensor(
       img_cam,
       img_marker,
-    ).to(device)
+    )
+
+    inp = transform_input_batch(inp).to(device)
 
     start = time.time()
 
@@ -87,7 +89,7 @@ with torch.no_grad():
     # prime with edges from an edge detector
     tensor_marker = torch.from_numpy(np.array(img_marker))
     initial = (1.0 + tensor_marker) * edges
-    
+    initial = transform_output_batch(initial.reshape((1, *edges.shape)))
 
     # initial = torch.from_numpy(gt) + torch.rand_like(inp[0,4])
     inp[0,4,:,:] = initial.clone()
@@ -137,6 +139,17 @@ with torch.no_grad():
 
       est_noise = output[:,0]
       est_structure = output[:,1]
+
+      img_noise = (est_noise[0] / torch.max(est_noise)).numpy()
+      img_structure = (est_structure[0] / torch.max(est_structure)).numpy()
+      
+      plt.subplot(1,2,1)
+      plt.imshow(img_noise)
+
+      plt.subplot(1,2,2)
+      plt.imshow(img_noise)
+
+      plt.show()
 
       # subtract some of the noise from the current input
       inp[0,4,:,:] -= est_noise.reshape(inp.shape[2:4]) * step_sizes[i]

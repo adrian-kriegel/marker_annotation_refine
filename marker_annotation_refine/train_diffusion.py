@@ -27,7 +27,7 @@ from marker_annotation_refine.marker_refine_dataset import \
 from marker_annotation_refine.unet import UNet
 
 
-visualize = False
+visualize = True
 
 model_path = 'models/unet_denoise.pt'
 use_cpu = False
@@ -47,9 +47,8 @@ t_resize = transforms.Resize(target_shape)
 to_pil = transforms.ToPILImage()
 from_pil = transforms.PILToTensor()
 
-def transform_batch(
-  inputs : torch.Tensor,
-  outputs : torch.Tensor
+def transform_input_batch(
+  inputs : torch.Tensor
 ):
 
   '''
@@ -68,7 +67,12 @@ def transform_batch(
   res[:,3,:,:] = t_resize(inputs[:,3])
   res[:,4,:,:] = t_resize(inputs[:,4])
 
-  return res, t_resize(outputs)
+  return res
+
+def transform_output_batch(
+  outputs : torch.Tensor
+):
+  return t_resize(outputs)
 
 def create_input_tensor(
   img_cam : Image.Image,
@@ -203,14 +207,19 @@ def load_polygon_as_batch(
 
 # end load_polygon_as_batch
 
-def display_batch(inputs, outputs):
+def display_batch(
+  inputs :  torch.Tensor,
+  outputs : torch.Tensor,
+  est : torch.Tensor
+):
 
   ''' Display part of noise batch. '''
 
   img = tensor_to_img(inputs[0, 0:3])
 
-  inputs, outputs = inputs.detach().cpu().numpy(), outputs.detach().cpu().numpy()
-
+  inputs = inputs.detach().cpu().numpy()
+  outputs = outputs.detach().cpu().numpy()
+  est = est.detach().cpu().numpy()
 
   marker = inputs[0, 3]
 
@@ -223,6 +232,7 @@ def display_batch(inputs, outputs):
   noise_1 = outputs[max_noise_level - 1, 0]
   gt_1 = noisy_gt_1 - noise_1
   gt_1 /= np.max(gt_1)
+
 
   plt.subplot(2, 3, 1)
   plt.imshow(img)
@@ -244,6 +254,10 @@ def display_batch(inputs, outputs):
   plt.subplot(2,3,5)
 
   plt.imshow(noisy_gt_1)
+
+  plt.subplot(2,3,6)
+
+  plt.imshow(est[-1][1] / np.max(est[-1][1]))
 
   plt.show()
 
@@ -309,7 +323,8 @@ if __name__ == '__main__':
 
   for i, (inputs, gt) in enumerate(ds):
 
-    inputs,gt = transform_batch(inputs, gt)
+    inputs = transform_input_batch(inputs)
+    gt = transform_output_batch(gt)
     
     n,c,h,w = gt.shape[0:4]
 
@@ -336,7 +351,7 @@ if __name__ == '__main__':
       i += 1
 
       if visualize:
-        display_batch(inputs, gt)
+        display_batch(inputs, gt, output)
 
       if i % report_interval == 0:
 
